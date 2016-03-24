@@ -9,11 +9,15 @@ Last updated: 3/22/2016
 from cobra import Metabolite as CobraMetabolite
 from cobra import Model as CobraModel
 from cobra import Reaction as CobraReaction
+from itertools import chain
 from openpyxl import load_workbook
 from pprint import PrettyPrinter
 import math
 import numpy as np
 import re
+
+#constants
+N_AVOGADRO = 6.022e23 #Avogadro constant
 
 #Represents a model (submodels, compartments, species, reactions, parameters, references)
 class Model:
@@ -24,7 +28,12 @@ class Model:
     parameters = []
     references = []
     
+    density = None
+    
     speciesCounts = np.zeros((0, 0)) #rows: species, columns: compartments
+    mass = None #cell mass
+    volume = None #cell volume
+    extracellularVolume = None #media volume
     
     def __init__(self, submodels = [], compartments = [], species = [], reactions = [], parameters = [], references = []):
         self.submodels = submodels
@@ -32,115 +41,269 @@ class Model:
         self.species = species
         self.reactions = reactions
         self.parameters = parameters
-        self.references = references
+        self.references = references       
         
-    def setupForSimulation(self):
-        self.speciesCounts = np.zeros((len(self.species), len(self.compartments)))
-        
+    def setupSimulation(self):
         for submdl in self.submodels:
-            submdl.setupForSimulation()
+            submdl.setupSimulation()
+
+        self.calcInitialConditions()
+            
+    def calcInitialConditions(self):
+        cellComp = self.getComponentById('c')
+        extrComp = self.getComponentById('e')
+        
+        #volume
+        self.volume = cellComp.initialVolume
+        self.extracellularVolume = extrComp.initialVolume
+        
+        #species counts
+        self.speciesCounts = np.zeros((len(self.species), len(self.compartments)))
+        for species in self.species:
+            for conc in species.concentrations:
+                if conc.compartment == cellComp:
+                    self.speciesCounts[species.index, cellComp.index] = conc.value * self.volume * N_AVOGADRO
+                else:
+                    self.speciesCounts[species.index, extrComp.index] = conc.value * self.volume * N_AVOGADRO
+        
+        #cell mass
+        self.calcMass()                
+         
+        #density
+        self.density = self.mass / self.volume
+        
+        #sync submodels
+        for submdl in self.submodels:
+            submdl.setSpeciesCounts(self)
+        
+    def calcMass(self):
+        mass = np.zeros((1, len(self.compartments)))
+        for comp in self.compartments:
+            for species in self.species:
+                if species.molecularWeight is not None:
+                    mass[0, comp.index] += self.speciesCounts[species.index, comp.index] / N_AVOGADRO * species.molecularWeight
+        
+        self.mass = mass
+    
+    def calcVolume(self):
+        self.volume = self.mass / self.density
+        
+    def setComponentIndices(self):
+        for index, obj in enumerate(self.submodels):
+            obj.index = index
+        for index, obj in enumerate(self.compartments):
+            obj.index = index
+        for index, obj in enumerate(self.species):
+            obj.index = index
+        for index, obj in enumerate(self.reactions):
+            obj.index = index
+        for index, obj in enumerate(self.parameters):
+            obj.index = index
+        for index, obj in enumerate(self.references):
+            obj.index = index
         
     def getComponentById(self, id):
-        components = self.submodels + self.compartments + self.species + self.reactions + self.parameters + self.references
+        components = chain(self.submodels, self.compartments, self.species, self.reactions, self.parameters, self.references)
         for component in components:
             if component.id == id:
                 return component
                
 #Represents a submodel
 class Submodel:
+    index = None
     id = ''
     name = ''
     algorithm = ''
+    
     reactions = []
-    reactionParticipants = []
-    enzymes = []
+    species = []
+    parameters = []
     
-    reactionParticipantCounts = np.zeros((0, 0))
-    enzymeCounts = np.zeros((0, 0))
+    speciesCounts = np.zeros((0, 0))
     
-    def __init__(self, id = '', name = '', reactions = [], reactionParticipants = [], enzymeCompartments = []):
+    def __init__(self, id = '', name = '', reactions = [], species = []):
         self.id = id
         self.name = name
         self.reactions = reactions
-        self.reactionParticipants = reactionParticipants
-        self.enzymeCompartments = enzymeCompartments
+        self.species = species
     
-    def setupForSimulation(self):
-        self.reactionParticipantCounts = np.zeros((len(self.reactionParticipants), 1))
-        self.enzymeCounts = np.zeros((len(self.enzymes), 1))
+    def setupSimulation(self):
+        #initialize species counts dictionary
+        self.speciesCounts = {}
+        for species in self.species:
+            self.speciesCounts[species.id] = 0
+        
+    #sets local species counts from global species counts
+    def setSpeciesCounts(self, mdl):
+        for species in self.species:
+            self.speciesCounts[species.id] = mdl.speciesCounts[species.species.index, species.compartment.index]
+    
+    #sets global species counts from local species counts 
+    def getSpeciesCounts(self, mdl):
+        for species in self.species:
+            mdl.speciesCounts[species.species.index, species.compartment.index] = self.speciesCounts[species.id]
+        
+    #runs simulation
+    def simulate(self):
+        pass
+        
+    #Evaluate rate laws for each reaction
+    def calcReactionRates(self):
+        rates = np.zeros((len(self.reactions), 1))        
+        for iRxn, rxn in enumerate(self.reactions):            
+            rates[iRxn, 0] = eval(rxn.rateLaw.transcoded, {}, {'speciesCounts': self.speciesCounts, 'Vmax': rxn.vmax, 'Km': rxn.km})
+            
+        return rates
+        
+    def getComponentById(self, id):
+        components = chain(self.species, self.reactions, self.parameters)
+        for component in components:
+            if component.id == id:
+                return component
         
 #Represents an FBA submodel
 class FbaSubmodel(Submodel):
+    biomassProductionReaction = None 
+    exchangedSpecies = None
+    
     cobraModel = None
+    thermodynamicBounds = None
+    exchangeRateBounds = None
+    
+    defaultFbaBound = 1e15
     
     def __init__(self, *args, **kwargs):        
         Submodel.__init__(self, *args, **kwargs)
         self.algorithm = 'FBA'
         
-    def setupForSimulation(self):
+    def setupSimulation(self):
         '''setup reaction participant, enzyme counts matrices'''
-        Submodel.setupForSimulation(self)
+        Submodel.setupSimulation(self)        
                 
         '''Setup FBA'''
-        self.cobraModel = CobraModel(self.id)
+        cbMdl = CobraModel(self.id)
+        self.cobraModel = cbMdl
             
         #setup metabolites
         cbMets = []
-        for part in self.reactionParticipants:
-            cbMets.append(CobraMetabolite(
-                id = '%s[%s]' % (part.species.id, part.compartment.id),
-                name = '%s (%s)' % (part.species.name, part.compartment.name)))
-        self.cobraModel.add_metabolites(cbMets)
+        for species in self.species:
+            cbMets.append(CobraMetabolite(id = species.id, name = species.name))
+        cbMdl.add_metabolites(cbMets)
         
         #setup reactions
         for rxn in self.reactions:            
             cbRxn = CobraReaction(
                 id = rxn.id,
                 name = rxn.name,
-                lower_bound = -1000. if rxn.reversible else 0,
-                upper_bound = 1000.,
-                objective_coefficient = 1. if rxn.id == 'BiomassProduction' else 0.,
+                lower_bound = -self.defaultFbaBound if rxn.reversible else 0,
+                upper_bound =  self.defaultFbaBound,
+                objective_coefficient = 1 if rxn.id == 'BiomassProduction' else 0,
                 )
-            self.cobraModel.add_reaction(cbRxn)
+            cbMdl.add_reaction(cbRxn)
 
             cbMets = {}
             for part in rxn.participants:
-                cbMets['%s[%s]' % (part.species.id, part.compartment.id)] = part.coefficient
+                cbMets[part.id] = part.coefficient
             cbRxn.add_metabolites(cbMets)            
         
         #add external exchange reactions
-        for part in self.reactionParticipants:
-            if part.compartment.id == 'e':
+        self.exchangedSpecies = []
+        for species in self.species:
+            if species.compartment.id == 'e':                
                 cbRxn = CobraReaction(
-                    id = '%sEx' % part.species.id,
-                    name = '%s exchange' % part.species.name,
-                    lower_bound = -1000.,
-                    upper_bound = 1000.,
-                    objective_coefficient = 0.,
+                    id = '%sEx' % species.species.id,
+                    name = '%s exchange' % species.species.name,
+                    lower_bound = -self.defaultFbaBound,
+                    upper_bound =  self.defaultFbaBound,
+                    objective_coefficient = 0,
                     )
-                self.cobraModel.add_reaction(cbRxn)
-                cbRxn.add_metabolites({'%s[e]' % part.species.id: 1})
+                cbMdl.add_reaction(cbRxn)
+                cbRxn.add_metabolites({species.id: 1})
+                
+                self.exchangedSpecies.append(ExchangedSpecies(id = species.id, reactionIndex = cbMdl.reactions.index(cbRxn)))
         
         #add biomass exchange reaction
         cbRxn = CobraReaction(
             id = 'BiomassEx',
             name = 'Biomass exchange',
-            lower_bound = 0.,
-            upper_bound = 1000.,
-            objective_coefficient = 0.,
+            lower_bound = 0,
+            upper_bound = self.defaultFbaBound,
+            objective_coefficient = 0,
             )
-        self.cobraModel.add_reaction(cbRxn)
+        cbMdl.add_reaction(cbRxn)
         cbRxn.add_metabolites({'Biomass[c]': -1})
         
-        cbRxn = CobraReaction(
-            id = 'BiomassEx2',
-            name = 'Biomass exchange 2',
-            lower_bound = 0.,
-            upper_bound = 1000.,
-            objective_coefficient = 0.,
-            )
-        self.cobraModel.add_reaction(cbRxn)
-        cbRxn.add_metabolites({'Biomass[c]': 1})
+        '''Bounds'''
+        #thermodynamic       
+        arrCbMdl = cbMdl.to_array_based_model()
+        self.thermodynamicBounds = {
+            'lower': arrCbMdl.lower_bounds,
+            'upper': arrCbMdl.upper_bounds,
+            }
+            
+        #exchange reactions
+        carbonExRate = self.getComponentById('CarbonExchangeRate').value
+        nonCarbonExRate = self.getComponentById('CarbonExchangeRate').value
+        self.exchangeRateBounds = {
+            'lower': np.full((len(cbMdl.reactions), 1), -np.inf),
+            'upper': np.full((len(cbMdl.reactions), 1),  np.inf),
+            }
+        for exSpecies in self.exchangedSpecies:
+            if self.getComponentById(exSpecies.id).species.containsCarbon():
+                self.exchangeRateBounds['lower'][exSpecies.reactionIndex] = -carbonExRate
+                self.exchangeRateBounds['upper'][exSpecies.reactionIndex] =  carbonExRate
+            else:
+                self.exchangeRateBounds['lower'][exSpecies.reactionIndex] = -nonCarbonExRate
+                self.exchangeRateBounds['upper'][exSpecies.reactionIndex] =  nonCarbonExRate
+            
+        '''Setup reactions'''
+        self.biomassProductionReaction = {
+            'index': cbMdl.reactions.index(cbMdl.reactions.get_by_id('BiomassProduction')),
+            'reaction': self.getComponentById('BiomassProduction'),
+            }
+                
+    def simulate(self):
+        '''calc and set bounds'''
+        lowerBounds, upperBounds = self.calcBounds()
+        arrCbModel = self.cobraModel.to_array_based_model()
+        arrCbModel.lower_bounds = lowerBounds
+        arrCbModel.upper_bounds = upperBounds
+        
+        '''calculate growth rate'''
+        self.cobraModel.optimize()
+        growth = self.cobraModel.solution.x[self.biomassProductionReaction.index] #fraction cell/s
+        
+        '''update metabolite counts'''
+        #biomass production
+        for part in self.biomassProductionReaction.reaction.participants:
+            self.speciesCounts[part.id] -= growth * part.coefficient
+        
+        #external nutrients
+        for exSpecies in self.exchangedSpecies:
+            self.speciesCounts[exSpecies.id] += self.cobraModel.solution.x[exSpecies.reactionIndex]
+        
+    def calcBounds(self):
+        cbMdl = self.cobraModel
+        arMdl = cbMdl.to_array_based_model()
+        
+        #thermodynamics
+        lowerBounds = self.thermodynamicBounds['lower']
+        upperBounds = self.thermodynamicBounds['upper']
+        
+        #rate laws
+        upperBounds[0:len(self.reactions)] = np.minimum(upperBounds[0:len(self.reactions)], self.calcReactionsRates())
+            
+        #external nutrients availability
+        for exSpecies in self.exchangedSpecies:
+            #availability
+            upperBounds
+            self.speciesCounts[exSpecies.id]
+        
+        #exchange bounds
+        lowerBounds = np.maximum(lowerBounds, self.dryMass / 3600 * N_AVOGADRO * 1e-3 * self.exchangeRateBounds['lower'])
+        upperBOunds = np.minimum(upperBounds, self.dryMass / 3600 * N_AVOGADRO * 1e-3 * self.exchangeRateBounds['upper'])
+        
+        return (lowerBounds, upperBounds)
         
 #Represents an SSA submodel
 class SsaSubmodel(Submodel):
@@ -148,45 +311,59 @@ class SsaSubmodel(Submodel):
         Submodel.__init__(self, *args, **kwargs)
         self.algorithm = 'SSA'
         
-    def setupForSimulation(self):
-        Submodel.setupForSimulation(self)
+    def setupSimulation(self):
+        Submodel.setupSimulation(self)
         
 #Represents a compartment
 class Compartment:
+    index = None
     id = ''
     name = ''
-    volume = None
+    initialVolume = None
     comments = ''
     
-    def __init__(self, id = '', name = '', volume = None, comments = ''):
+    def __init__(self, id = '', name = '', initialVolume = None, comments = ''):
         self.id = id
         self.name = name
-        self.volume = volume
+        self.initialVolume = initialVolume
         self.comments = comments
         
 #Represents a species
 class Species:
+    index = None
     id = ''
     name = ''
     structure = ''
+    empiricalFormula = ''
+    molecularWeight = None
     charge = None
     type = ''
     subtype = ''
     concentrations = []
     crossRefs = []
     
-    def __init__(self, id = '', name = '', structure = '', charge = None, type = '', subtype = '', concentrations = [], crossRefs = []): 
+    def __init__(self, id = '', name = '', structure = '', empiricalFormula = '', molecularWeight = None, 
+        charge = None, type = '', subtype = '', concentrations = [], crossRefs = []):
+        
         self.id = id    
         self.name = name
         self.structure = structure
+        self.empiricalFormula = empiricalFormula
+        self.molecularWeight = molecularWeight
         self.charge = charge
         self.type = type
         self.subtype = subtype
         self.concentrations = concentrations
         self.crossRefs = crossRefs
+        
+    def containsCarbon(self):
+        if self.empiricalFormula:
+            return self.empiricalFormula.upper().find('C') != -1
+        return False
 
 #Represents a reaction
 class Reaction:
+    index = None
     id = ''
     name = ''
     submodel = ''
@@ -198,7 +375,9 @@ class Reaction:
     km = None
     crossRefs = []
 
-    def __init__(self, id = '', name = '', submodel = '', reversible = None, participants = [], enzyme = '', rateLaw = '', vmax = None, km = None, crossRefs = []):        
+    def __init__(self, id = '', name = '', submodel = '', reversible = None, participants = [], 
+        enzyme = '', rateLaw = '', vmax = None, km = None, crossRefs = []):
+        
         self.id = id    
         self.name = name
         self.submodel = submodel
@@ -210,6 +389,7 @@ class Reaction:
         self.km = km
         self.crossRefs = crossRefs
         
+    #convert rate law to python        
     def getStoichiometryString(self):
         globalComp = self.participants[0].compartment
         for part in self.participants:
@@ -252,21 +432,25 @@ class Reaction:
         
 #Represents a model parameter
 class Parameter:
+    index = None
     id = ''
     name = ''
+    submodel = None
     value = None
     units = ''
     comments = ''
     
-    def __init__(self, id = '', name = '', value = None, units = '', comments = ''):
+    def __init__(self, id = '', name = '', submodel = '', value = None, units = '', comments = ''):
         self.id = id
         self.name = name
+        self.submodel = submodel
         self.value = value
         self.units = units
         self.comments = comments
             
 #Represents a reference
 class Reference:
+    index = None
     id = ''
     name = ''
     crossRefs = []
@@ -287,14 +471,32 @@ class Concentration:
         self.compartment = compartment
         self.value = value
     
-#Represents a participant in a reaction
+#Represents a participant in a submodel
 class SpeciesCompartment:
+    index = None    
     species = ''
     compartment = ''
     
-    def __init__(self, species = '', compartment = ''):
+    id = ''
+    name = ''
+    
+    def __init__(self, index = None, species = '', compartment = ''):
+        self.index = index
         self.species = species
         self.compartment = compartment    
+        
+    def calcIdName(self):
+        self.id = '%s[%s]' % (self.species.id, self.compartment.id)
+        self.name = '%s (%s)' % (self.species.name, self.compartment.name)
+      
+#Represents an external 
+class ExchangedSpecies:
+    id = ''
+    reactionIndex = None
+    
+    def __init__(self, id = '', reactionIndex = None):
+        self.id = id
+        self.reactionIndex = reactionIndex
     
 #Represents a participant in a reaction
 class ReactionParticipant:
@@ -302,10 +504,34 @@ class ReactionParticipant:
     compartment = ''
     coefficient = None
     
+    id = ''
+    name = ''
+    
     def __init__(self, species = '', compartment = '', coefficient = None):
         self.species = species
         self.compartment = compartment    
         self.coefficient = coefficient
+        
+    def calcIdName(self):
+        self.id = '%s[%s]' % (self.species.id, self.compartment.id)
+        self.name = '%s (%s)' % (self.species.name, self.compartment.name)
+
+#Represents a rate law
+class RateLaw:
+    native = ''
+    transcoded = ''
+    
+    def __init__(self, native = ''):
+        self.native = native or ''
+        
+        #transcoded for python
+        self.transcoded = self.native
+        
+        p = re.compile('\b(min)\b')
+        self.transcoded = p.sub(r"math.\1", self.transcoded)
+        
+        p = re.compile('\b([a-z0-9\-_]+)\b', flags=re.I)
+        self.transcoded = p.sub(r"speciesCount['\1']", self.transcoded)        
     
 #Represents a cross reference to an external database
 class CrossReference:
@@ -344,14 +570,20 @@ def getModelFromExcel(filename):
         mdl.compartments.append(Compartment(
             id = ws.cell(row = iRow, column = 1).value,
             name = ws.cell(row = iRow, column = 2).value,
-            volume = float(ws.cell(row = iRow, column = 3).value),
+            initialVolume = float(ws.cell(row = iRow, column = 3).value),
             comments = ws.cell(row = iRow, column = 4).value,
             ))
     
     #species
     ws = wb['Species']
     for iRow in range(2, ws.max_row + 1):
-        chargeStr = ws.cell(row = iRow, column = 4).value
+        mwStr = ws.cell(row = iRow, column = 5).value
+        if mwStr:
+            mw = float(mwStr)
+        else:
+            mw = None
+            
+        chargeStr = ws.cell(row = iRow, column = 6).value
         if chargeStr:
             charge = float(chargeStr)
         else:
@@ -361,17 +593,19 @@ def getModelFromExcel(filename):
             id = ws.cell(row = iRow, column = 1).value,
             name = ws.cell(row = iRow, column = 2).value,
             structure = ws.cell(row = iRow, column = 3).value,
+            empiricalFormula = ws.cell(row = iRow, column = 4).value,
+            molecularWeight = mw,
             charge = charge,
-            type = ws.cell(row = iRow, column = 5).value,
-            subtype = ws.cell(row = iRow, column = 6).value, 
+            type = ws.cell(row = iRow, column = 7).value,
+            subtype = ws.cell(row = iRow, column = 8).value, 
             concentrations = [
-                Concentration(compartment = 'c', value = float(ws.cell(row = iRow, column = 7).value or 0)),
-                Concentration(compartment = 'e', value = float(ws.cell(row = iRow, column = 8).value or 0)),
+                Concentration(compartment = 'c', value = float(ws.cell(row = iRow, column = 9).value or 0)),
+                Concentration(compartment = 'e', value = float(ws.cell(row = iRow, column = 10).value or 0)),
                 ],
             crossRefs = [
                 CrossReference(
-                    source = ws.cell(row = iRow, column = 11).value, 
-                    id = ws.cell(row = iRow, column = 12).value,
+                    source = ws.cell(row = iRow, column = 13).value, 
+                    id = ws.cell(row = iRow, column = 14).value,
                     ),
                 ],
             ))
@@ -387,7 +621,7 @@ def getModelFromExcel(filename):
             reversible = stoichiometry['reversible'],
             participants = stoichiometry['participants'],
             enzyme = ws.cell(row = iRow, column = 5).value,
-            rateLaw = ws.cell(row = iRow, column = 6).value,
+            rateLaw = RateLaw(ws.cell(row = iRow, column = 6).value),
             vmax = ws.cell(row = iRow, column = 7).value,
             km = ws.cell(row = iRow, column = 8).value,
             crossRefs = [
@@ -404,9 +638,10 @@ def getModelFromExcel(filename):
         mdl.parameters.append(Parameter(
             id = ws.cell(row = iRow, column = 1).value,
             name = ws.cell(row = iRow, column = 2).value,
-            value = float(ws.cell(row = iRow, column = 3).value),
-            units = ws.cell(row = iRow, column = 4).value,
-			comments = ws.cell(row = iRow, column = 5).value,
+            submodel = ws.cell(row = iRow, column = 3).value,
+            value = float(ws.cell(row = iRow, column = 4).value),
+            units = ws.cell(row = iRow, column = 5).value,
+			comments = ws.cell(row = iRow, column = 6).value,
             ))
             
     #references
@@ -423,6 +658,9 @@ def getModelFromExcel(filename):
                 ],
             comments = ws.cell(row = iRow, column = 5).value,
             ))
+            
+    '''set component indices'''
+    mdl.setComponentIndices()
             
     '''deserialize references'''
     undefinedComponents = []
@@ -454,12 +692,22 @@ def getModelFromExcel(filename):
             if id and obj is None:
                 undefinedComponents.append(id)
             part.compartment = obj
+            
+            part.calcIdName()
         
         id = reaction.enzyme
         obj = mdl.getComponentById(id)
         if id and obj is None:
             undefinedComponents.append(id)
         reaction.enzyme = obj
+
+    for param in mdl.parameters:
+        id = param.submodel
+        if id:
+            obj = mdl.getComponentById(id)
+            if obj is None:
+                undefinedComponents.append(id)
+            param.submodel = obj
 
     if len(undefinedComponents) > 0:
         undefinedComponents = list(set(undefinedComponents))
@@ -468,36 +716,33 @@ def getModelFromExcel(filename):
         
     for submdl in mdl.submodels:
         submdl.reactions = []
-        submdl.reactionParticipants = []
-        submdl.enzymes = []
+        submdl.species = []
+        submdl.parameters = []
     for rxn in mdl.reactions:
         rxn.submodel.reactions.append(rxn)
         for part in rxn.participants:
-            rxn.submodel.reactionParticipants.append('%s[%s' % (part.species.id, part.compartment.id))
+            rxn.submodel.species.append('%s[%s' % (part.species.id, part.compartment.id))
         if rxn.enzyme:
-            rxn.submodel.enzymeCompartments.append(rxn.enzyme.id)
+            rxn.submodel.species.append('%s[%s' % (rxn.enzyme.id, 'c'))
+    for param in mdl.parameters:
+        if param.submodel:
+            param.submodel.parameters.append(param)
     for submdl in mdl.submodels:
-        partStrArr = list(set(submdl.reactionParticipants))
-        partStrArr.sort()
-        submdl.reactionParticipants = []
-        for partStr in partStrArr:
-            speciesId, compId = partStr.split('[')
-            submdl.reactionParticipants.append(SpeciesCompartment(
+        speciesStrArr = list(set(submdl.species))
+        speciesStrArr.sort()
+        submdl.species = []
+        for index, speciesStr in enumerate(speciesStrArr):
+            speciesId, compId = speciesStr.split('[')
+            speciesComp = SpeciesCompartment(
+                index = index,
                 species = mdl.getComponentById(speciesId),
                 compartment = mdl.getComponentById(compId),
-                ))
-        
-        enzStrArr = list(set(submdl.enzymes))
-        enzStrArr.sort()
-        submdl.enzymes = []
-        for enzStr in enzStrArr:
-            submdl.enzymes.append(SpeciesCompartment(
-                species = mdl.getComponentById(enzStr), 
-                compartment = mdl.getComponentById('c'),
-                ))
+                )
+            speciesComp.calcIdName()
+            submdl.species.append(speciesComp)
         
     '''Prepare submodels for computation'''
-    mdl.setupForSimulation()    
+    mdl.setupSimulation()    
         
     '''Return'''
     return mdl

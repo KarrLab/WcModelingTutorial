@@ -19,7 +19,7 @@ import math
 import numpy as np
 
 #model parameters
-nAvogadro = 6.022e23 #Avogadro constant
+N_AVOGADRO = 6.022e23 #Avogadro constant
 cellVol = 4.58e-17 #volume (L)
 concAa = 0.5e-3 #[ALA], [ARG], [CYS], ... (M)
 concNxp = 1e-3 #[NTP], [NDP], [NMP] (M)
@@ -67,27 +67,38 @@ genes = [
         ]
 
 #1 and 3 letter amino acid codes
+mwH = 1.0079
+mwH2O = 18.0152
+chargeH = 1
+chargeH2O = 0
+
+nmps = [
+    {'id': 'A', 'name': 'AMP', 'molecularWeight': 345.205, 'charge': -2},
+    {'id': 'C', 'name': 'CMP', 'molecularWeight': 321.18, 'charge': -2},
+    {'id': 'G', 'name': 'GMP', 'molecularWeight': 361.204, 'charge': -2},
+    {'id': 'U', 'name': 'UMP', 'molecularWeight': 322.165, 'charge': -2},
+    ]
 aminoAcids = [
-    {'id': 'A', 'name': 'ALA', 'charge': 0},
-    {'id': 'R', 'name': 'ARG', 'charge': 1},
-    {'id': 'D', 'name': 'ASP', 'charge': -1},
-    {'id': 'N', 'name': 'ASN', 'charge': 0},
-    {'id': 'C', 'name': 'CYS', 'charge': 0},
-    {'id': 'Q', 'name': 'GLN', 'charge': 0},
-    {'id': 'E', 'name': 'GLU', 'charge': -1},
-    {'id': 'G', 'name': 'GLY', 'charge': 0},
-    {'id': 'H', 'name': 'HIS', 'charge': 0},
-    {'id': 'I', 'name': 'ILE', 'charge': 0},
-    {'id': 'L', 'name': 'LEU', 'charge': 0},
-    {'id': 'K', 'name': 'LYS', 'charge': 1},
-    {'id': 'M', 'name': 'MET', 'charge': 0},
-    {'id': 'F', 'name': 'PHE', 'charge': 0},
-    {'id': 'P', 'name': 'PRO', 'charge': 0},
-    {'id': 'S', 'name': 'SER', 'charge': 0},
-    {'id': 'T', 'name': 'THR', 'charge': 0},
-    {'id': 'W', 'name': 'TRP', 'charge': 0},
-    {'id': 'Y', 'name': 'TYR', 'charge': 0},
-    {'id': 'V', 'name': 'VAL', 'charge': 0},
+    {'id': 'A', 'name': 'ALA', 'molecularWeight': 89.0929, 'charge': 0},
+    {'id': 'R', 'name': 'ARG', 'molecularWeight': 175.208, 'charge': 1},
+    {'id': 'D', 'name': 'ASP', 'molecularWeight': 132.094, 'charge': -1},
+    {'id': 'N', 'name': 'ASN', 'molecularWeight': 132.118, 'charge': 0},
+    {'id': 'C', 'name': 'CYS', 'molecularWeight': 121.158, 'charge': 0},
+    {'id': 'Q', 'name': 'GLN', 'molecularWeight': 146.144, 'charge': 0},
+    {'id': 'E', 'name': 'GLU', 'molecularWeight': 146.121, 'charge': -1},
+    {'id': 'G', 'name': 'GLY', 'molecularWeight': 75.0664, 'charge': 0},
+    {'id': 'H', 'name': 'HIS', 'molecularWeight': 155.154, 'charge': 0},
+    {'id': 'I', 'name': 'ILE', 'molecularWeight': 131.172, 'charge': 0},
+    {'id': 'L', 'name': 'LEU', 'molecularWeight': 131.172, 'charge': 0},
+    {'id': 'K', 'name': 'LYS', 'molecularWeight': 147.195, 'charge': 1},
+    {'id': 'M', 'name': 'MET', 'molecularWeight': 149.211, 'charge': 0},
+    {'id': 'F', 'name': 'PHE', 'molecularWeight': 165.189, 'charge': 0},
+    {'id': 'P', 'name': 'PRO', 'molecularWeight': 115.13, 'charge': 0},
+    {'id': 'S', 'name': 'SER', 'molecularWeight': 105.092, 'charge': 0},
+    {'id': 'T', 'name': 'THR', 'molecularWeight': 119.119, 'charge': 0},
+    {'id': 'W', 'name': 'TRP', 'molecularWeight': 204.225, 'charge': 0},
+    {'id': 'Y', 'name': 'TYR', 'molecularWeight': 181.188, 'charge': 0},
+    {'id': 'V', 'name': 'VAL', 'molecularWeight': 117.146, 'charge': 0},
     ]
 
 #1. Generates random RNA and protein species of length 3 * (protLen + 1) and protLen for each gene in the "genes" array. 
@@ -95,6 +106,8 @@ aminoAcids = [
 #3. Calculates a biomass production reaction (FBA objective) which is consistent with the specified biomass composition (metabolite concentrations) and transcription, translation, and RNA degradation reactions.
 #4. Outputs these species and reactions to an Excel file
 def run(protLen = 100, startCodon = 'ATG', stopCodon = 'TAG'):
+    random.seed(0)
+
     nGene = len(genes)
     
     '''generate random sequences'''
@@ -120,15 +133,17 @@ def run(protLen = 100, startCodon = 'ATG', stopCodon = 'TAG'):
     specWs['A1'] = 'ID'
     specWs['B1'] = 'Name'
     specWs['C1'] = 'Structure'
-    specWs['D1'] = 'Charge'
-    specWs['E1'] = 'Type'
-    specWs['F1'] = 'Subtype'
-    specWs['G1'] = 'Average concentration, cytosol'
-    specWs['H1'] = 'Average concentration, extracellular space'
-    specWs['I1'] = 'Average count, cytosol'
-    specWs['J1'] = 'Average count, extracellular space'
-    specWs['K1'] = 'Cross reference source'
-    specWs['L1'] = 'Cross reference ID'
+    specWs['D1'] = 'Empirical formula'
+    specWs['E1'] = 'Molecular weight'
+    specWs['F1'] = 'Charge'
+    specWs['G1'] = 'Type'
+    specWs['H1'] = 'Subtype'
+    specWs['I1'] = 'Average concentration, cytosol'
+    specWs['J1'] = 'Average concentration, extracellular space'
+    specWs['K1'] = 'Average count, cytosol'
+    specWs['L1'] = 'Average count, extracellular space'
+    specWs['M1'] = 'Cross reference source'
+    specWs['N1'] = 'Cross reference ID'
     
     rxnWs['A1'] = 'ID'
     rxnWs['B1'] = 'Name'
@@ -143,36 +158,54 @@ def run(protLen = 100, startCodon = 'ATG', stopCodon = 'TAG'):
     
     for iGene, gene in enumerate(genes):
         #RNA species
+        mw = 0
+        charge = 0
+        for nmp in nmps:
+            mw += rnaSeqs[iGene].seq.count(nmp['id']) * nmp['molecularWeight']
+            charge += rnaSeqs[iGene].seq.count(nmp['id']) * nmp['charge']
+        l = len(rnaSeqs[iGene])
+        mw = mw + (l - 1) * (mwH - mwH2O)
+        charge = charge + (l - 1) * (chargeH - chargeH2O)
+        
         specWs['A%d' % (iGene + 2)] = '%s-Rna' % gene['id'] #ID
         specWs['B%d' % (iGene + 2)] = '%s (RNA)' % gene['name'] #name
         specWs['C%d' % (iGene + 2)] = str(rnaSeqs[iGene].seq) #Structure (sequence)
-        specWs['D%d' % (iGene + 2)] = -4 * (protLen + 1) * 3 #charge
-        specWs['E%d' % (iGene + 2)] = 'RNA' #type
-        specWs['F%d' % (iGene + 2)] = '' #subtype
-        specWs['G%d' % (iGene + 2)] =  nRnaCopy / cellVol / nAvogadro #cytosol concentration
-        specWs['H%d' % (iGene + 2)] =  0 #extracellular concentration
-        specWs['I%d' % (iGene + 2)] =  nRnaCopy #cytosol count
-        specWs['J%d' % (iGene + 2)] =  0 #extracellular count
-        specWs['K%d' % (iGene + 2)] = '' #Cross reference source
-        specWs['L%d' % (iGene + 2)] = '' #Cross reference ID
+        specWs['D%d' % (iGene + 2)] = '' #Empirical formula
+        specWs['E%d' % (iGene + 2)] = mw #molecular weight
+        specWs['F%d' % (iGene + 2)] = charge #charge
+        specWs['G%d' % (iGene + 2)] = 'RNA' #type
+        specWs['H%d' % (iGene + 2)] = '' #subtype
+        specWs['I%d' % (iGene + 2)] =  nRnaCopy / cellVol / N_AVOGADRO #cytosol concentration
+        specWs['J%d' % (iGene + 2)] =  0 #extracellular concentration
+        specWs['K%d' % (iGene + 2)] =  nRnaCopy #cytosol count
+        specWs['L%d' % (iGene + 2)] =  0 #extracellular count
+        specWs['M%d' % (iGene + 2)] = '' #Cross reference source
+        specWs['N%d' % (iGene + 2)] = '' #Cross reference ID
         
         #protein species
-        protCharge = 0
+        mw = 0
+        charge = 0
         for aa in aminoAcids:
-            protCharge += protSeqs[iGene].seq.count(aa['id']) * aa['charge'] - 4 * (2 * len(protSeqs[iGene].seq) + 3 - (len(protSeqs[iGene].seq) - 1))
+            mw += protSeqs[iGene].seq.count(aa['id']) * aa['molecularWeight']
+            charge += protSeqs[iGene].seq.count(aa['id']) * aa['charge']
+        l = len(protSeqs[iGene])
+        mw -= (l - 1) * mwH2O
+        charge -= (l - 1) * chargeH2O
         
         specWs['A%d' % (iGene + 2 + nGene)] = '%s-Protein' % gene['id'] #ID
         specWs['B%d' % (iGene + 2 + nGene)] = '%s (Protein)' % gene['name'] #name
         specWs['C%d' % (iGene + 2 + nGene)] = str(protSeqs[iGene].seq) #Structure
-        specWs['D%d' % (iGene + 2 + nGene)] = protCharge #charge
-        specWs['E%d' % (iGene + 2 + nGene)] = 'Protein' #type
-        specWs['F%d' % (iGene + 2 + nGene)] = '' #subtype
-        specWs['G%d' % (iGene + 2 + nGene)] =  nProtCopy / cellVol / nAvogadro #cytosol concentration
-        specWs['H%d' % (iGene + 2 + nGene)] =  0 #extracellular concentration
-        specWs['I%d' % (iGene + 2 + nGene)] =  nProtCopy #cytosol count
-        specWs['J%d' % (iGene + 2 + nGene)] =  0 #extracellular count
-        specWs['K%d' % (iGene + 2 + nGene)] = '' #Cross reference source
-        specWs['L%d' % (iGene + 2 + nGene)] = '' #Cross reference ID
+        specWs['D%d' % (iGene + 2 + nGene)] = '' #Empirical formula
+        specWs['E%d' % (iGene + 2 + nGene)] = mw #molecular weight
+        specWs['F%d' % (iGene + 2 + nGene)] = charge #charge
+        specWs['G%d' % (iGene + 2 + nGene)] = 'Protein' #type
+        specWs['H%d' % (iGene + 2 + nGene)] = '' #subtype
+        specWs['I%d' % (iGene + 2 + nGene)] =  nProtCopy / cellVol / N_AVOGADRO #cytosol concentration
+        specWs['J%d' % (iGene + 2 + nGene)] =  0 #extracellular concentration
+        specWs['K%d' % (iGene + 2 + nGene)] =  nProtCopy #cytosol count
+        specWs['L%d' % (iGene + 2 + nGene)] =  0 #extracellular count
+        specWs['M%d' % (iGene + 2 + nGene)] = '' #Cross reference source
+        specWs['N%d' % (iGene + 2 + nGene)] = '' #Cross reference ID
         
         #transcription reaction
         nA = rnaSeqs[iGene].seq.count('A')
@@ -232,7 +265,7 @@ def run(protLen = 100, startCodon = 'ATG', stopCodon = 'TAG'):
         rxnWs['E%d' % (iGene + 2 + nGene * 2)] = 'Rnase-Protein' #enzyme
         rxnWs['F%d' % (iGene + 2 + nGene * 2)] = 'Vmax * %s-Rna[c] / (%s-Rna[c] + Km) * Rnase-Protein[c]' % (gene['id'], gene['id']) #rate law
         rxnWs['G%d' % (iGene + 2 + nGene * 2)] = math.log(2) / RnaHalfLife * 2 * nRnaCopy / nProtCopy #Vmax
-        rxnWs['H%d' % (iGene + 2 + nGene * 2)] = nRnaCopy / cellVol / nAvogadro #Km
+        rxnWs['H%d' % (iGene + 2 + nGene * 2)] = nRnaCopy / cellVol / N_AVOGADRO #Km
         rxnWs['I%d' % (iGene + 2 + nGene * 2)] = 'EC' #Cross reference source
         rxnWs['J%d' % (iGene + 2 + nGene * 2)] = '3.1.-.-' #Cross reference ID
         
@@ -266,41 +299,41 @@ def run(protLen = 100, startCodon = 'ATG', stopCodon = 'TAG'):
     nH2O_dcy = ((protLen + 1) * 3 - 1) * nRnaCopy * len(genes) * (CellCycleLength / RnaHalfLife)
    
     nGtp_trl = (2 * protLen + 3) * nProtCopy * len(genes)
-    nH2o_trl = (protLen + 2) * nProtCopy * len(genes)
+    nH2o_trl = (protLen + 4) * nProtCopy * len(genes)
         
     stochArr = []
     stochArr.append({'species': 'Biomass', 'coeff': 1})
     
     stochArr.append({'species': 'H2O', 'coeff': 0
-        - cellVol * concH2O * nAvogadro 
+        - cellVol * concH2O * N_AVOGADRO 
         - nH2O_trn 
         - nH2o_trl
         - nH2O_dcy
         })
     stochArr.append({'species': 'H', 'coeff': 0
-        - cellVol * concH * nAvogadro
+        - cellVol * concH * N_AVOGADRO
         + nH2O_trn
         + nGtp_trl
         + nH2O_dcy
         })
         
-    stochArr.append({'species': 'ATP', 'coeff': -cellVol * concNxp * nAvogadro - nNtp_trn['A']})
-    stochArr.append({'species': 'CTP', 'coeff': -cellVol * concNxp * nAvogadro - nNtp_trn['C']})
-    stochArr.append({'species': 'GTP', 'coeff': -cellVol * concNxp * nAvogadro - nNtp_trn['G'] - nGtp_trl})
-    stochArr.append({'species': 'UTP', 'coeff': -cellVol * concNxp * nAvogadro - nNtp_trn['U']})
+    stochArr.append({'species': 'ATP', 'coeff': -cellVol * concNxp * N_AVOGADRO - nNtp_trn['A']})
+    stochArr.append({'species': 'CTP', 'coeff': -cellVol * concNxp * N_AVOGADRO - nNtp_trn['C']})
+    stochArr.append({'species': 'GTP', 'coeff': -cellVol * concNxp * N_AVOGADRO - nNtp_trn['G'] - nGtp_trl})
+    stochArr.append({'species': 'UTP', 'coeff': -cellVol * concNxp * N_AVOGADRO - nNtp_trn['U']})
     
-    stochArr.append({'species': 'GDP', 'coeff': -cellVol * concNxp * nAvogadro + nGtp_trl})
+    stochArr.append({'species': 'GDP', 'coeff': -cellVol * concNxp * N_AVOGADRO + nGtp_trl})
     
-    stochArr.append({'species': 'AMP', 'coeff': -cellVol * concNxp * nAvogadro + nNmp_dcy['A']})
-    stochArr.append({'species': 'CMP', 'coeff': -cellVol * concNxp * nAvogadro + nNmp_dcy['C']})
-    stochArr.append({'species': 'GMP', 'coeff': -cellVol * concNxp * nAvogadro + nNmp_dcy['G']})
-    stochArr.append({'species': 'UMP', 'coeff': -cellVol * concNxp * nAvogadro + nNmp_dcy['U']})
+    stochArr.append({'species': 'AMP', 'coeff': -cellVol * concNxp * N_AVOGADRO + nNmp_dcy['A']})
+    stochArr.append({'species': 'CMP', 'coeff': -cellVol * concNxp * N_AVOGADRO + nNmp_dcy['C']})
+    stochArr.append({'species': 'GMP', 'coeff': -cellVol * concNxp * N_AVOGADRO + nNmp_dcy['G']})
+    stochArr.append({'species': 'UMP', 'coeff': -cellVol * concNxp * N_AVOGADRO + nNmp_dcy['U']})
     
-    stochArr.append({'species': 'PPI', 'coeff': -cellVol * concPPi * nAvogadro + nPPi_trn})
-    stochArr.append({'species': 'PI', 'coeff': -cellVol * concPi * nAvogadro + nGtp_trl})
+    stochArr.append({'species': 'PPI', 'coeff': -cellVol * concPPi * N_AVOGADRO + nPPi_trn})
+    stochArr.append({'species': 'PI', 'coeff': -cellVol * concPi * N_AVOGADRO + nGtp_trl})
     
     for aa in aminoAcids:
-        stochArr.append({'species': aa['name'], 'coeff': -cellVol * concAa * nAvogadro - nAa_trl[aa['id']]})
+        stochArr.append({'species': aa['name'], 'coeff': -cellVol * concAa * N_AVOGADRO - nAa_trl[aa['id']]})
     
     lhs = []
     rhs = []
@@ -327,7 +360,7 @@ def run(protLen = 100, startCodon = 'ATG', stopCodon = 'TAG'):
     specWs.freeze_panes = specWs['B2']
     rxnWs.freeze_panes = rxnWs['B2']   
     
-    for i in range(1, 12 + 1):
+    for i in range(1, 14 + 1):
         cell = specWs.cell(row=1, column=i)
         cell.font = cell.font.copy(bold = True)
         cell.fill = cell.fill.copy(fgColor=Color('CCCCCC'), patternType='solid')
@@ -339,7 +372,7 @@ def run(protLen = 100, startCodon = 'ATG', stopCodon = 'TAG'):
         
     for i in range(1, 2 * nGene + 2):
         specWs.row_dimensions[i].height = 15
-        for j in range(1, 12 + 1):
+        for j in range(1, 14 + 1):
             cell = specWs.cell(row=i, column=j)
             cell.alignment = cell.alignment.copy(wrap_text = True)
             
@@ -349,18 +382,18 @@ def run(protLen = 100, startCodon = 'ATG', stopCodon = 'TAG'):
             cell = rxnWs.cell(row=i, column=j)
             cell.alignment = cell.alignment.copy(wrap_text = True)
     
-    wb.save("Model-RNA and proteins.xlsx")    
+    wb.save("data/Model-RNA and proteins.xlsx")    
 
     '''save RNA and protein sequences in FASTA format'''
-    output_handle = open("Genes.fasta", "w")
+    output_handle = open("data/Genes.fasta", "w")
     SeqIO.write(rnaSeqs, output_handle, "fasta")
     output_handle.close()
     
-    output_handle = open("RNAs.fasta", "w")
+    output_handle = open("data/RNAs.fasta", "w")
     SeqIO.write(rnaSeqs, output_handle, "fasta")
     output_handle.close()
     
-    output_handle = open("Proteins.fasta", "w")
+    output_handle = open("data/Proteins.fasta", "w")
     SeqIO.write(protSeqs, output_handle, "fasta")
     output_handle.close()
     
@@ -369,7 +402,7 @@ def generateRandomSequence(protLen = 100, startCodon = 'ATG', stopCodon = 'TAG')
     dnaBases = 'ACGT'
     
     dnaSeqStr = startCodon
-    for iCodon in range(protLen-1):
+    for iCodon in range(protLen - 1):
         validCodon = False
         while not(validCodon):
             codonStr = '' \
