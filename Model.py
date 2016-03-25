@@ -1,8 +1,8 @@
 ''' 
 Reads models specified in Excel into a Python object
 
-Author: Jonathan Karr, karr@mssm.edu
-Last updated: 3/22/2016
+@author Jonathan Karr, karr@mssm.edu
+@date 3/22/2016
 '''
 
 #required libraries
@@ -11,9 +11,9 @@ from cobra import Model as CobraModel
 from cobra import Reaction as CobraReaction
 from itertools import chain
 from openpyxl import load_workbook
-from pprint import PrettyPrinter
 import math
 import numpy as np
+import util
 import re
 
 #constants
@@ -29,9 +29,11 @@ class Model:
     references = []
     
     density = None
+    fractionDryWeight = None
     
     speciesCounts = np.zeros((0, 0)) #rows: species, columns: compartments
     mass = None #cell mass
+    dryWeight = None #cell dry weight
     volume = None #cell volume
     extracellularVolume = None #media volume
     
@@ -44,6 +46,8 @@ class Model:
         self.references = references       
         
     def setupSimulation(self):
+        self.fractionDryWeight = self.getComponentById('fractionDryWeight').value
+    
         for submdl in self.submodels:
             submdl.setupSimulation()
 
@@ -74,16 +78,21 @@ class Model:
         
         #sync submodels
         for submdl in self.submodels:
-            submdl.setSpeciesCounts(self)
+            submdl.updateLocalCellState(self)
         
     def calcMass(self):
-        mass = np.zeros((1, len(self.compartments)))
         for comp in self.compartments:
-            for species in self.species:
-                if species.molecularWeight is not None:
-                    mass[0, comp.index] += self.speciesCounts[species.index, comp.index] / N_AVOGADRO * species.molecularWeight
+            if comp.id == 'c':
+                iCellComp = comp.index
+    
+        mass = 0.
+        for species in self.species:
+            if species.molecularWeight is not None:
+                mass += self.speciesCounts[species.index, iCellComp] * species.molecularWeight
+        mass /= N_AVOGADRO
         
         self.mass = mass
+        self.dryWeight = self.fractionDryWeight * mass
     
     def calcVolume(self):
         self.volume = self.mass / self.density
@@ -134,12 +143,12 @@ class Submodel:
             self.speciesCounts[species.id] = 0
         
     #sets local species counts from global species counts
-    def setSpeciesCounts(self, mdl):
+    def updateLocalCellState(self, mdl):
         for species in self.species:
             self.speciesCounts[species.id] = mdl.speciesCounts[species.species.index, species.compartment.index]
     
     #sets global species counts from local species counts 
-    def getSpeciesCounts(self, mdl):
+    def updateGlobalCellState(self, mdl):
         for species in self.species:
             mdl.speciesCounts[species.species.index, species.compartment.index] = self.speciesCounts[species.id]
         
@@ -149,9 +158,10 @@ class Submodel:
         
     #Evaluate rate laws for each reaction
     def calcReactionRates(self):
-        rates = np.zeros((len(self.reactions), 1))        
-        for iRxn, rxn in enumerate(self.reactions):            
-            rates[iRxn, 0] = eval(rxn.rateLaw.transcoded, {}, {'speciesCounts': self.speciesCounts, 'Vmax': rxn.vmax, 'Km': rxn.km})
+        rates = np.full((len(self.reactions)), np.nan)
+        for iRxn, rxn in enumerate(self.reactions):          
+            if rxn.rateLaw:
+                rates[iRxn] = eval(rxn.rateLaw.transcoded, {}, {'speciesCounts': self.speciesCounts, 'Vmax': rxn.vmax, 'Km': rxn.km})
             
         return rates
         
@@ -171,6 +181,8 @@ class FbaSubmodel(Submodel):
     exchangeRateBounds = None
     
     defaultFbaBound = 1e15
+    
+    dryWeight = None
     
     def __init__(self, *args, **kwargs):        
         Submodel.__init__(self, *args, **kwargs)
@@ -237,16 +249,16 @@ class FbaSubmodel(Submodel):
         #thermodynamic       
         arrCbMdl = cbMdl.to_array_based_model()
         self.thermodynamicBounds = {
-            'lower': arrCbMdl.lower_bounds,
-            'upper': arrCbMdl.upper_bounds,
+            'lower': np.array(arrCbMdl.lower_bounds.tolist()),
+            'upper': np.array(arrCbMdl.upper_bounds.tolist()),
             }
-            
+        
         #exchange reactions
-        carbonExRate = self.getComponentById('CarbonExchangeRate').value
-        nonCarbonExRate = self.getComponentById('CarbonExchangeRate').value
+        carbonExRate = self.getComponentById('carbonExchangeRate').value
+        nonCarbonExRate = self.getComponentById('nonCarbonExchangeRate').value
         self.exchangeRateBounds = {
-            'lower': np.full((len(cbMdl.reactions), 1), -np.inf),
-            'upper': np.full((len(cbMdl.reactions), 1),  np.inf),
+            'lower': np.full((len(cbMdl.reactions)), -np.inf),
+            'upper': np.full((len(cbMdl.reactions)),  np.inf),
             }
         for exSpecies in self.exchangedSpecies:
             if self.getComponentById(exSpecies.id).species.containsCarbon():
@@ -261,6 +273,10 @@ class FbaSubmodel(Submodel):
             'index': cbMdl.reactions.index(cbMdl.reactions.get_by_id('BiomassProduction')),
             'reaction': self.getComponentById('BiomassProduction'),
             }
+            
+    def updateLocalCellState(self, mdl):
+        Submodel.updateLocalCellState(self, mdl)
+        self.dryWeight = mdl.dryWeight
                 
     def simulate(self):
         '''calc and set bounds'''
@@ -271,11 +287,11 @@ class FbaSubmodel(Submodel):
         
         '''calculate growth rate'''
         self.cobraModel.optimize()
-        growth = self.cobraModel.solution.x[self.biomassProductionReaction.index] #fraction cell/s
+        growth = self.cobraModel.solution.x[self.biomassProductionReaction['index']] #fraction cell/s
         
         '''update metabolite counts'''
         #biomass production
-        for part in self.biomassProductionReaction.reaction.participants:
+        for part in self.biomassProductionReaction['reaction'].participants:
             self.speciesCounts[part.id] -= growth * part.coefficient
         
         #external nutrients
@@ -291,18 +307,18 @@ class FbaSubmodel(Submodel):
         upperBounds = self.thermodynamicBounds['upper']
         
         #rate laws
-        upperBounds[0:len(self.reactions)] = np.minimum(upperBounds[0:len(self.reactions)], self.calcReactionsRates())
-            
+        upperBounds[0:len(self.reactions)] = util.nanminimum(upperBounds[0:len(self.reactions)], self.calcReactionRates())
+        
+        
         #external nutrients availability
-        for exSpecies in self.exchangedSpecies:
-            #availability
-            upperBounds
-            self.speciesCounts[exSpecies.id]
+        #for exSpecies in self.exchangedSpecies:
+        #    upperBounds[exSpecies.reactionIndex] = util.nanminimum(upperBounds[exSpecies.reactionIndex], self.speciesCounts[exSpecies.id])
         
         #exchange bounds
-        lowerBounds = np.maximum(lowerBounds, self.dryMass / 3600 * N_AVOGADRO * 1e-3 * self.exchangeRateBounds['lower'])
-        upperBOunds = np.minimum(upperBounds, self.dryMass / 3600 * N_AVOGADRO * 1e-3 * self.exchangeRateBounds['upper'])
+        lowerBounds = util.nanminimum(lowerBounds, self.dryWeight / 3600 * N_AVOGADRO * 1e-3 * self.exchangeRateBounds['lower'])
+        upperBOunds = util.nanminimum(upperBounds, self.dryWeight / 3600 * N_AVOGADRO * 1e-3 * self.exchangeRateBounds['upper'])
         
+        #return
         return (lowerBounds, upperBounds)
         
 #Represents an SSA submodel
@@ -374,9 +390,15 @@ class Reaction:
     vmax = None
     km = None
     crossRefs = []
+    comments = ''
 
     def __init__(self, id = '', name = '', submodel = '', reversible = None, participants = [], 
-        enzyme = '', rateLaw = '', vmax = None, km = None, crossRefs = []):
+        enzyme = '', rateLaw = '', vmax = None, km = None, crossRefs = [], comments = ''):
+        
+        if vmax:
+            vmax = float(vmax)
+        if km:
+            km = float(km)
         
         self.id = id    
         self.name = name
@@ -388,6 +410,7 @@ class Reaction:
         self.vmax = vmax
         self.km = km
         self.crossRefs = crossRefs
+        self.comments = comments
         
     #convert rate law to python        
     def getStoichiometryString(self):
@@ -524,15 +547,25 @@ class RateLaw:
     def __init__(self, native = ''):
         self.native = native or ''
         
-        #transcoded for python
+    #get modifiers of rate law
+    def getModifiers(self, species, compartments):
+        modifiers = []        
+        for comp in compartments:
+            for spec in species:
+                id = '%s[%s]' % (spec.id, comp.id)
+                if self.native.find(id) != -1:
+                    modifiers.append(id)
+        return modifiers
+        
+    #transcoded for python
+    def transcode(self, species, compartments):
         self.transcoded = self.native
         
-        p = re.compile('\b(min)\b')
-        self.transcoded = p.sub(r"math.\1", self.transcoded)
+        for comp in compartments:
+            for spec in species:
+                id = '%s[%s]' % (spec.id, comp.id)
+                self.transcoded = self.transcoded.replace(id, "speciesCounts['%s']" % id)
         
-        p = re.compile('\b([a-z0-9\-_]+)\b', flags=re.I)
-        self.transcoded = p.sub(r"speciesCount['\1']", self.transcoded)        
-    
 #Represents a cross reference to an external database
 class CrossReference:
     source = ''
@@ -612,8 +645,16 @@ def getModelFromExcel(filename):
             
     #reactions
     ws = wb['Reactions']
+        
     for iRow in range(2, ws.max_row + 1):
         stoichiometry = parseStoichiometry(ws.cell(row = iRow, column = 4).value)
+        
+        rateLawStr = ws.cell(row = iRow, column = 6).value
+        if rateLawStr:
+            rateLaw = RateLaw(rateLawStr)
+        else:
+            rateLaw = None
+        
         mdl.reactions.append(Reaction(
             id = ws.cell(row = iRow, column = 1).value,
             name = ws.cell(row = iRow, column = 2).value,
@@ -621,7 +662,7 @@ def getModelFromExcel(filename):
             reversible = stoichiometry['reversible'],
             participants = stoichiometry['participants'],
             enzyme = ws.cell(row = iRow, column = 5).value,
-            rateLaw = RateLaw(ws.cell(row = iRow, column = 6).value),
+            rateLaw = rateLaw,
             vmax = ws.cell(row = iRow, column = 7).value,
             km = ws.cell(row = iRow, column = 8).value,
             crossRefs = [
@@ -630,6 +671,7 @@ def getModelFromExcel(filename):
                     id = ws.cell(row = iRow, column = 10).value,
                     ),
                 ],
+            comments = ws.cell(row = iRow, column = 11).value,
             ))
             
     #parameters
@@ -665,6 +707,7 @@ def getModelFromExcel(filename):
     '''deserialize references'''
     undefinedComponents = []
     
+    #species concentration 
     for species in mdl.species:
         for conc in species.concentrations:
             id = conc.compartment            
@@ -673,6 +716,7 @@ def getModelFromExcel(filename):
                 undefinedComponents.append(id)
             conc.compartment = obj                
             
+    #reaction submodel, participant species, participant compartments, enzymes
     for reaction in mdl.reactions:
         id = reaction.submodel        
         obj = mdl.getComponentById(id)
@@ -701,6 +745,7 @@ def getModelFromExcel(filename):
             undefinedComponents.append(id)
         reaction.enzyme = obj
 
+    #parameter submodels
     for param in mdl.parameters:
         id = param.submodel
         if id:
@@ -714,6 +759,7 @@ def getModelFromExcel(filename):
         undefinedComponents.sort()
         raise Exception('Undefined components:\n- %s' % ('\n- '.join(undefinedComponents)))
         
+    ''' Assemble back rerferences'''
     for submdl in mdl.submodels:
         submdl.reactions = []
         submdl.species = []
@@ -721,18 +767,23 @@ def getModelFromExcel(filename):
     for rxn in mdl.reactions:
         rxn.submodel.reactions.append(rxn)
         for part in rxn.participants:
-            rxn.submodel.species.append('%s[%s' % (part.species.id, part.compartment.id))
+            rxn.submodel.species.append('%s[%s]' % (part.species.id, part.compartment.id))
         if rxn.enzyme:
-            rxn.submodel.species.append('%s[%s' % (rxn.enzyme.id, 'c'))
+            rxn.submodel.species.append('%s[%s]' % (rxn.enzyme.id, 'c'))
+        if rxn.rateLaw:
+            rxn.submodel.species += rxn.rateLaw.getModifiers(mdl.species, mdl.compartments)
+    
     for param in mdl.parameters:
         if param.submodel:
             param.submodel.parameters.append(param)
+            
     for submdl in mdl.submodels:
         speciesStrArr = list(set(submdl.species))
         speciesStrArr.sort()
         submdl.species = []
         for index, speciesStr in enumerate(speciesStrArr):
             speciesId, compId = speciesStr.split('[')
+            compId = compId[0:-1]
             speciesComp = SpeciesCompartment(
                 index = index,
                 species = mdl.getComponentById(speciesId),
@@ -740,9 +791,14 @@ def getModelFromExcel(filename):
                 )
             speciesComp.calcIdName()
             submdl.species.append(speciesComp)
+            
+    '''Transcode rate laws'''
+    for rxn in mdl.reactions:
+        if rxn.rateLaw:
+            rxn.rateLaw.transcode(mdl.species, mdl.compartments)
         
     '''Prepare submodels for computation'''
-    mdl.setupSimulation()    
+    mdl.setupSimulation()
         
     '''Return'''
     return mdl

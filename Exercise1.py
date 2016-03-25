@@ -11,8 +11,8 @@ Recommended for interactive development
 - pprint
 - pyreadline
 
-Author: Jonathan Karr, karr@mssm.edu
-Last updated: 3/17/2016
+@author Jonathan Karr, karr@mssm.edu
+@date 3/17/2016
 '''
 
 #required libraries

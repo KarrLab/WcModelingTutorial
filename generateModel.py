@@ -4,8 +4,8 @@ Generates the random components of the example model:
 - Transcription, translation, and RNA degradation reactions for each RNA and protein species 
 - Biomass production reaction (FBA objective) which is consistent with the specified biomass composition and transcription, translation, and RNA degradation reactions
 
-Author: Jonathan Karr, karr@mssm.edu
-Last updated: 3/24/2016
+@author Jonathan Karr, karr@mssm.edu
+@date 3/24/2016
 '''
 
 #required libraries
@@ -29,8 +29,8 @@ concH2O = 55 #[H2O] (M)
 concH = 1.1220e-08 # [H] (M)
 nRnaCopy = 5. #Copy numbers of RNA
 nProtCopy = 100. #copy numbers of proteins
-CellCycleLength = 10 * 60 * 60. #(s)
-RnaHalfLife = 5 * 60. #(s)
+cellCycleLength = 10 * 60 * 60. #(s)
+rnaHalfLife = 5 * 60. #(s)
 
 #list of to generate random sequences for
 genes = [
@@ -155,6 +155,7 @@ def run(protLen = 100, startCodon = 'ATG', stopCodon = 'TAG'):
     rxnWs['H1'] = 'Km (M)'
     rxnWs['I1'] = 'Cross reference source'
     rxnWs['J1'] = 'Cross reference ID'
+    rxnWs['K1'] = 'Comments'
     
     for iGene, gene in enumerate(genes):
         #RNA species
@@ -222,10 +223,11 @@ def run(protLen = 100, startCodon = 'ATG', stopCodon = 'TAG'):
             len(rnaSeqs[iGene].seq), )
         rxnWs['E%d' % (iGene + 2)] = 'RnaPolymerase-Protein' #enzyme
         rxnWs['F%d' % (iGene + 2)] = 'Vmax * min(ATP[c], CTP[c], GTP[c], UTP[c]) / (Km + min(ATP[c], CTP[c], GTP[c], UTP[c])) * RnaPol-Protein[c]' #rate law
-        rxnWs['G%d' % (iGene + 2)] = math.log(2) * (1 / RnaHalfLife + 1 / CellCycleLength) * 2 * nRnaCopy / nProtCopy #Vmax
+        rxnWs['G%d' % (iGene + 2)] = math.log(2) * (1 / rnaHalfLife + 1 / cellCycleLength) * 2 * nRnaCopy / nProtCopy #Vmax
         rxnWs['H%d' % (iGene + 2)] = concNxp #Km
         rxnWs['I%d' % (iGene + 2)] = 'EC' #Cross reference source
         rxnWs['J%d' % (iGene + 2)] = '2.7.7.6' #Cross reference ID
+        rxnWs['K%d' % (iGene + 2)] = 'Kinetics constrained by cell theory (mass doubling).' #Comments
         
         #translation reaction
         aaCnts = []
@@ -245,10 +247,11 @@ def run(protLen = 100, startCodon = 'ATG', stopCodon = 'TAG'):
             2 * len(protSeqs[iGene].seq),)
         rxnWs['E%d' % (iGene + 2 + nGene)] = 'Ribosome-Protein' #enzyme
         rxnWs['F%d' % (iGene + 2 + nGene)] = 'Vmax * min(Ala[c], Arg[c], Asp[c], Asn[c], Cys[c], Gln[c], Glu[c], Gly[c], His[c], Ile[c], Leu[c], Lys[c], Met[c], Phe[c], Pro[c], Ser[c], Thr[c], Trp[c], Tyr[c], Val[c]) / (Km + min(Ala[c], Arg[c], Asp[c], Asn[c], Cys[c], Gln[c], Glu[c], Gly[c], His[c], Ile[c], Leu[c], Lys[c], Met[c], Phe[c], Pro[c], Ser[c], Thr[c], Trp[c], Tyr[c], Val[c])) * %s-Rna[c] * Ribosome-Protein[c]' % gene['id'] #rate law
-        rxnWs['G%d' % (iGene + 2 + nGene)] = math.log(2) / CellCycleLength * 2 / nRnaCopy #Vmax
+        rxnWs['G%d' % (iGene + 2 + nGene)] = math.log(2) / cellCycleLength * 2 / nRnaCopy #Vmax
         rxnWs['H%d' % (iGene + 2 + nGene)] = concAa #Km
         rxnWs['I%d' % (iGene + 2 + nGene)] = 'EC' #Cross reference source
         rxnWs['J%d' % (iGene + 2 + nGene)] = '2.3.2.12' #Cross reference ID
+        rxnWs['K%d' % (iGene + 2 + nGene)] = 'Kinetics constrained by cell theory (mass doubling).' #Comments
         
         #RNA degradation reaction
         rxnWs['A%d' % (iGene + 2 + nGene * 2)] = 'RnaDegradation-%s' % gene['id'] #ID
@@ -264,10 +267,11 @@ def run(protLen = 100, startCodon = 'ATG', stopCodon = 'TAG'):
             len(rnaSeqs[iGene].seq) - 1, )
         rxnWs['E%d' % (iGene + 2 + nGene * 2)] = 'Rnase-Protein' #enzyme
         rxnWs['F%d' % (iGene + 2 + nGene * 2)] = 'Vmax * %s-Rna[c] / (%s-Rna[c] + Km) * Rnase-Protein[c]' % (gene['id'], gene['id']) #rate law
-        rxnWs['G%d' % (iGene + 2 + nGene * 2)] = math.log(2) / RnaHalfLife * 2 * nRnaCopy / nProtCopy #Vmax
+        rxnWs['G%d' % (iGene + 2 + nGene * 2)] = math.log(2) / rnaHalfLife * 2 * nRnaCopy / nProtCopy #Vmax
         rxnWs['H%d' % (iGene + 2 + nGene * 2)] = nRnaCopy / cellVol / N_AVOGADRO #Km
         rxnWs['I%d' % (iGene + 2 + nGene * 2)] = 'EC' #Cross reference source
         rxnWs['J%d' % (iGene + 2 + nGene * 2)] = '3.1.-.-' #Cross reference ID
+        rxnWs['K%d' % (iGene + 2 + nGene * 2)] = 'Kinetics determined by RNA half liife.' #Comments
         
     #biomass production
     baseCntsNtp = {'A': 0, 'C': 0, 'G': 0, 'U': 0}
@@ -284,19 +288,19 @@ def run(protLen = 100, startCodon = 'ATG', stopCodon = 'TAG'):
         for aa in aminoAcids:
             nAa_trl[aa['id']] += protSeqs[iGene].seq.count(aa['id']) * nProtCopy
                 
-    nNtp_trn['A'] = baseCntsNtp['A'] * (1 + CellCycleLength / RnaHalfLife)
-    nNtp_trn['C'] = baseCntsNtp['C'] * (1 + CellCycleLength / RnaHalfLife)
-    nNtp_trn['G'] = baseCntsNtp['G'] * (1 + CellCycleLength / RnaHalfLife)
-    nNtp_trn['U'] = baseCntsNtp['U'] * (1 + CellCycleLength / RnaHalfLife)
+    nNtp_trn['A'] = baseCntsNtp['A'] * (1 + cellCycleLength / rnaHalfLife)
+    nNtp_trn['C'] = baseCntsNtp['C'] * (1 + cellCycleLength / rnaHalfLife)
+    nNtp_trn['G'] = baseCntsNtp['G'] * (1 + cellCycleLength / rnaHalfLife)
+    nNtp_trn['U'] = baseCntsNtp['U'] * (1 + cellCycleLength / rnaHalfLife)
     
-    nNmp_dcy['A'] = baseCntsNtp['A'] * CellCycleLength / RnaHalfLife
-    nNmp_dcy['C'] = baseCntsNtp['C'] * CellCycleLength / RnaHalfLife
-    nNmp_dcy['G'] = baseCntsNtp['G'] * CellCycleLength / RnaHalfLife
-    nNmp_dcy['U'] = baseCntsNtp['U'] * CellCycleLength / RnaHalfLife
+    nNmp_dcy['A'] = baseCntsNtp['A'] * cellCycleLength / rnaHalfLife
+    nNmp_dcy['C'] = baseCntsNtp['C'] * cellCycleLength / rnaHalfLife
+    nNmp_dcy['G'] = baseCntsNtp['G'] * cellCycleLength / rnaHalfLife
+    nNmp_dcy['U'] = baseCntsNtp['U'] * cellCycleLength / rnaHalfLife
     
-    nPPi_trn = (protLen + 1) * 3 * nRnaCopy * len(genes) * (1 + CellCycleLength / RnaHalfLife)
-    nH2O_trn = nRnaCopy * len(genes) * (1 + CellCycleLength / RnaHalfLife)
-    nH2O_dcy = ((protLen + 1) * 3 - 1) * nRnaCopy * len(genes) * (CellCycleLength / RnaHalfLife)
+    nPPi_trn = (protLen + 1) * 3 * nRnaCopy * len(genes) * (1 + cellCycleLength / rnaHalfLife)
+    nH2O_trn = nRnaCopy * len(genes) * (1 + cellCycleLength / rnaHalfLife)
+    nH2O_dcy = ((protLen + 1) * 3 - 1) * nRnaCopy * len(genes) * (cellCycleLength / rnaHalfLife)
    
     nGtp_trl = (2 * protLen + 3) * nProtCopy * len(genes)
     nH2o_trl = (protLen + 4) * nProtCopy * len(genes)
@@ -365,7 +369,7 @@ def run(protLen = 100, startCodon = 'ATG', stopCodon = 'TAG'):
         cell.font = cell.font.copy(bold = True)
         cell.fill = cell.fill.copy(fgColor=Color('CCCCCC'), patternType='solid')
         
-    for i in range(1, 10 + 1):
+    for i in range(1, 11 + 1):
         cell = rxnWs.cell(row=1, column=i)
         cell.font = cell.font.copy(bold = True)
         cell.fill = cell.fill.copy(fgColor=Color('CCCCCC'), patternType='solid')
@@ -378,7 +382,7 @@ def run(protLen = 100, startCodon = 'ATG', stopCodon = 'TAG'):
             
     for i in range(1, 3 * nGene + 3):
         rxnWs.row_dimensions[i].height = 15
-        for j in range(1, 10 + 1):
+        for j in range(1, 11 + 1):
             cell = rxnWs.cell(row=i, column=j)
             cell.alignment = cell.alignment.copy(wrap_text = True)
     
