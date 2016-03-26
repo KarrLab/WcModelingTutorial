@@ -65,10 +65,7 @@ class Model:
         self.speciesCounts = np.zeros((len(self.species), len(self.compartments)))
         for species in self.species:
             for conc in species.concentrations:
-                if conc.compartment == cellComp:
-                    self.speciesCounts[species.index, cellComp.index] = conc.value * self.volume * N_AVOGADRO
-                else:
-                    self.speciesCounts[species.index, extrComp.index] = conc.value * self.volume * N_AVOGADRO
+                self.speciesCounts[species.index, conc.compartment.index] = conc.value * conc.compartment.initialVolume * N_AVOGADRO
         
         #cell mass
         self.calcMass()                
@@ -257,8 +254,8 @@ class FbaSubmodel(Submodel):
         carbonExRate = self.getComponentById('carbonExchangeRate').value
         nonCarbonExRate = self.getComponentById('nonCarbonExchangeRate').value
         self.exchangeRateBounds = {
-            'lower': np.full((len(cbMdl.reactions)), -np.inf),
-            'upper': np.full((len(cbMdl.reactions)),  np.inf),
+            'lower': np.full((len(cbMdl.reactions)), -np.nan),
+            'upper': np.full((len(cbMdl.reactions)),  np.nan),
             }
         for exSpecies in self.exchangedSpecies:
             if self.getComponentById(exSpecies.id).species.containsCarbon():
@@ -307,12 +304,11 @@ class FbaSubmodel(Submodel):
         upperBounds = self.thermodynamicBounds['upper']
         
         #rate laws
-        upperBounds[0:len(self.reactions)] = util.nanminimum(upperBounds[0:len(self.reactions)], self.calcReactionRates())
-        
+        upperBounds[0:len(self.reactions)] = util.nanminimum(upperBounds[0:len(self.reactions)], self.calcReactionRates())        
         
         #external nutrients availability
-        #for exSpecies in self.exchangedSpecies:
-        #    upperBounds[exSpecies.reactionIndex] = util.nanminimum(upperBounds[exSpecies.reactionIndex], self.speciesCounts[exSpecies.id])
+        for exSpecies in self.exchangedSpecies:
+            upperBounds[exSpecies.reactionIndex] = np.minimum(upperBounds[exSpecies.reactionIndex], self.speciesCounts[exSpecies.id])
         
         #exchange bounds
         lowerBounds = util.nanminimum(lowerBounds, self.dryWeight / 3600 * N_AVOGADRO * 1e-3 * self.exchangeRateBounds['lower'])
@@ -357,9 +353,10 @@ class Species:
     subtype = ''
     concentrations = []
     crossRefs = []
+    comments = ''
     
     def __init__(self, id = '', name = '', structure = '', empiricalFormula = '', molecularWeight = None, 
-        charge = None, type = '', subtype = '', concentrations = [], crossRefs = []):
+        charge = None, type = '', subtype = '', concentrations = [], crossRefs = [], comments = ''):
         
         self.id = id    
         self.name = name
@@ -641,6 +638,7 @@ def getModelFromExcel(filename):
                     id = ws.cell(row = iRow, column = 14).value,
                     ),
                 ],
+            comments = ws.cell(row = iRow, column = 15).value,
             ))
             
     #reactions

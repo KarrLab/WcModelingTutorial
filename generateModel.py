@@ -144,6 +144,7 @@ def run(protLen = 100, startCodon = 'ATG', stopCodon = 'TAG'):
     specWs['L1'] = 'Average count, extracellular space'
     specWs['M1'] = 'Cross reference source'
     specWs['N1'] = 'Cross reference ID'
+    specWs['O1'] = 'Comments'
     
     rxnWs['A1'] = 'ID'
     rxnWs['B1'] = 'Name'
@@ -182,6 +183,7 @@ def run(protLen = 100, startCodon = 'ATG', stopCodon = 'TAG'):
         specWs['L%d' % (iGene + 2)] =  0 #extracellular count
         specWs['M%d' % (iGene + 2)] = '' #Cross reference source
         specWs['N%d' % (iGene + 2)] = '' #Cross reference ID
+        specWs['O%d' % (iGene + 2)] = '' #Comments
         
         #protein species
         mw = 0
@@ -207,6 +209,7 @@ def run(protLen = 100, startCodon = 'ATG', stopCodon = 'TAG'):
         specWs['L%d' % (iGene + 2 + nGene)] =  0 #extracellular count
         specWs['M%d' % (iGene + 2 + nGene)] = '' #Cross reference source
         specWs['N%d' % (iGene + 2 + nGene)] = '' #Cross reference ID
+        specWs['O%d' % (iGene + 2 + nGene)] = '' #Comments
         
         #transcription reaction
         nA = rnaSeqs[iGene].seq.count('A')
@@ -364,7 +367,7 @@ def run(protLen = 100, startCodon = 'ATG', stopCodon = 'TAG'):
     specWs.freeze_panes = specWs['B2']
     rxnWs.freeze_panes = rxnWs['B2']   
     
-    for i in range(1, 14 + 1):
+    for i in range(1, 15 + 1):
         cell = specWs.cell(row=1, column=i)
         cell.font = cell.font.copy(bold = True)
         cell.fill = cell.fill.copy(fgColor=Color('CCCCCC'), patternType='solid')
@@ -376,7 +379,7 @@ def run(protLen = 100, startCodon = 'ATG', stopCodon = 'TAG'):
         
     for i in range(1, 2 * nGene + 2):
         specWs.row_dimensions[i].height = 15
-        for j in range(1, 14 + 1):
+        for j in range(1, 15 + 1):
             cell = specWs.cell(row=i, column=j)
             cell.alignment = cell.alignment.copy(wrap_text = True)
             
