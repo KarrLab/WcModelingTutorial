@@ -29,7 +29,7 @@ concH2O = 55 #[H2O] (M)
 concH = 1.1220e-08 # [H] (M)
 nRnaCopy = 5. #Copy numbers of RNA
 nProtCopy = 100. #copy numbers of proteins
-cellCycleLength = 10 * 60 * 60. #(s)
+cellCycleLength = 8 * 60 * 60. #(s)
 rnaHalfLife = 5 * 60. #(s)
 
 #list of to generate random sequences for
