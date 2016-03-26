@@ -48,8 +48,8 @@ class Model:
     def setupSimulation(self):
         self.fractionDryWeight = self.getComponentById('fractionDryWeight').value
     
-        for submdl in self.submodels:
-            submdl.setupSimulation()
+        for subModel in self.submodels:
+            subModel.setupSimulation()
 
         self.calcInitialConditions()
             
@@ -74,8 +74,8 @@ class Model:
         self.density = self.mass / self.volume
         
         #sync submodels
-        for submdl in self.submodels:
-            submdl.updateLocalCellState(self)
+        for subModel in self.submodels:
+            subModel.updateLocalCellState(self)
         
     def calcMass(self):
         for comp in self.compartments:
@@ -140,14 +140,14 @@ class Submodel:
             self.speciesCounts[species.id] = 0
         
     #sets local species counts from global species counts
-    def updateLocalCellState(self, mdl):
+    def updateLocalCellState(self, model):
         for species in self.species:
-            self.speciesCounts[species.id] = mdl.speciesCounts[species.species.index, species.compartment.index]
+            self.speciesCounts[species.id] = model.speciesCounts[species.species.index, species.compartment.index]
     
     #sets global species counts from local species counts 
-    def updateGlobalCellState(self, mdl):
+    def updateGlobalCellState(self, model):
         for species in self.species:
-            mdl.speciesCounts[species.species.index, species.compartment.index] = self.speciesCounts[species.id]
+            model.speciesCounts[species.species.index, species.compartment.index] = self.speciesCounts[species.id]
         
     #runs simulation
     def simulate(self):
@@ -190,14 +190,14 @@ class FbaSubmodel(Submodel):
         Submodel.setupSimulation(self)        
                 
         '''Setup FBA'''
-        cbMdl = CobraModel(self.id)
-        self.cobraModel = cbMdl
+        cobraModel = CobraModel(self.id)
+        self.cobraModel = cobraModel
             
         #setup metabolites
         cbMets = []
         for species in self.species:
             cbMets.append(CobraMetabolite(id = species.id, name = species.name))
-        cbMdl.add_metabolites(cbMets)
+        cobraModel.add_metabolites(cbMets)
         
         #setup reactions
         for rxn in self.reactions:            
@@ -208,7 +208,7 @@ class FbaSubmodel(Submodel):
                 upper_bound =  self.defaultFbaBound,
                 objective_coefficient = 1 if rxn.id == 'BiomassProduction' else 0,
                 )
-            cbMdl.add_reaction(cbRxn)
+            cobraModel.add_reaction(cbRxn)
 
             cbMets = {}
             for part in rxn.participants:
@@ -226,10 +226,10 @@ class FbaSubmodel(Submodel):
                     upper_bound =  self.defaultFbaBound,
                     objective_coefficient = 0,
                     )
-                cbMdl.add_reaction(cbRxn)
+                cobraModel.add_reaction(cbRxn)
                 cbRxn.add_metabolites({species.id: 1})
                 
-                self.exchangedSpecies.append(ExchangedSpecies(id = species.id, reactionIndex = cbMdl.reactions.index(cbRxn)))
+                self.exchangedSpecies.append(ExchangedSpecies(id = species.id, reactionIndex = cobraModel.reactions.index(cbRxn)))
         
         #add biomass exchange reaction
         cbRxn = CobraReaction(
@@ -239,23 +239,23 @@ class FbaSubmodel(Submodel):
             upper_bound = self.defaultFbaBound,
             objective_coefficient = 0,
             )
-        cbMdl.add_reaction(cbRxn)
+        cobraModel.add_reaction(cbRxn)
         cbRxn.add_metabolites({'Biomass[c]': -1})
         
         '''Bounds'''
         #thermodynamic       
-        arrCbMdl = cbMdl.to_array_based_model()
+        arrayCobraModel = cobraModel.to_array_based_model()
         self.thermodynamicBounds = {
-            'lower': np.array(arrCbMdl.lower_bounds.tolist()),
-            'upper': np.array(arrCbMdl.upper_bounds.tolist()),
+            'lower': np.array(arrayCobraModel.lower_bounds.tolist()),
+            'upper': np.array(arrayCobraModel.upper_bounds.tolist()),
             }
         
         #exchange reactions
         carbonExRate = self.getComponentById('carbonExchangeRate').value
         nonCarbonExRate = self.getComponentById('nonCarbonExchangeRate').value
         self.exchangeRateBounds = {
-            'lower': np.full((len(cbMdl.reactions)), -np.nan),
-            'upper': np.full((len(cbMdl.reactions)),  np.nan),
+            'lower': np.full((len(cobraModel.reactions)), -np.nan),
+            'upper': np.full((len(cobraModel.reactions)),  np.nan),
             }
         for exSpecies in self.exchangedSpecies:
             if self.getComponentById(exSpecies.id).species.containsCarbon():
@@ -267,13 +267,13 @@ class FbaSubmodel(Submodel):
             
         '''Setup reactions'''
         self.biomassProductionReaction = {
-            'index': cbMdl.reactions.index(cbMdl.reactions.get_by_id('BiomassProduction')),
+            'index': cobraModel.reactions.index(cobraModel.reactions.get_by_id('BiomassProduction')),
             'reaction': self.getComponentById('BiomassProduction'),
             }
             
-    def updateLocalCellState(self, mdl):
-        Submodel.updateLocalCellState(self, mdl)
-        self.dryWeight = mdl.dryWeight
+    def updateLocalCellState(self, model):
+        Submodel.updateLocalCellState(self, model)
+        self.dryWeight = model.dryWeight
                 
     def simulate(self):
         '''calc and set bounds'''
@@ -296,8 +296,8 @@ class FbaSubmodel(Submodel):
             self.speciesCounts[exSpecies.id] += self.cobraModel.solution.x[exSpecies.reactionIndex]
         
     def calcBounds(self):
-        cbMdl = self.cobraModel
-        arMdl = cbMdl.to_array_based_model()
+        cobraModel = self.cobraModel
+        arMdl = cobraModel.to_array_based_model()
         
         #thermodynamics
         lowerBounds = self.thermodynamicBounds['lower']
@@ -577,7 +577,7 @@ def getModelFromExcel(filename):
     wb = load_workbook(filename = filename)
 
     #initialize model object
-    mdl = Model()
+    model = Model()
 
     '''Read details from Excel'''
     #submodels
@@ -587,17 +587,17 @@ def getModelFromExcel(filename):
         name = ws.cell(row = iRow, column = 2).value
         algorithm = ws.cell(row = iRow, column = 3).value
         if algorithm == 'FBA':
-            submdl = FbaSubmodel(id = id, name = name)
+            subModel = FbaSubmodel(id = id, name = name)
         elif algorithm == 'SSA':
-            submdl = SsaSubmodel(id = id, name = name)
+            subModel = SsaSubmodel(id = id, name = name)
         else:
             raise Exception('Undefined algorithm "%s" for submodel "%s"' % (algorithm, id))
-        mdl.submodels.append(submdl)
+        model.submodels.append(subModel)
             
     #compartments
     ws = wb['Compartments']
     for iRow in range(2, ws.max_row + 1):
-        mdl.compartments.append(Compartment(
+        model.compartments.append(Compartment(
             id = ws.cell(row = iRow, column = 1).value,
             name = ws.cell(row = iRow, column = 2).value,
             initialVolume = float(ws.cell(row = iRow, column = 3).value),
@@ -619,7 +619,7 @@ def getModelFromExcel(filename):
         else:
             charge = None
     
-        mdl.species.append(Species(
+        model.species.append(Species(
             id = ws.cell(row = iRow, column = 1).value,
             name = ws.cell(row = iRow, column = 2).value,
             structure = ws.cell(row = iRow, column = 3).value,
@@ -653,7 +653,7 @@ def getModelFromExcel(filename):
         else:
             rateLaw = None
         
-        mdl.reactions.append(Reaction(
+        model.reactions.append(Reaction(
             id = ws.cell(row = iRow, column = 1).value,
             name = ws.cell(row = iRow, column = 2).value,
             submodel = ws.cell(row = iRow, column = 3).value,
@@ -675,7 +675,7 @@ def getModelFromExcel(filename):
     #parameters
     ws = wb['Parameters']
     for iRow in range(2, ws.max_row + 1):
-        mdl.parameters.append(Parameter(
+        model.parameters.append(Parameter(
             id = ws.cell(row = iRow, column = 1).value,
             name = ws.cell(row = iRow, column = 2).value,
             submodel = ws.cell(row = iRow, column = 3).value,
@@ -687,7 +687,7 @@ def getModelFromExcel(filename):
     #references
     ws = wb['References']
     for iRow in range(2, ws.max_row + 1):
-        mdl.references.append(Reference(
+        model.references.append(Reference(
             id = ws.cell(row = iRow, column = 1).value,
             name = ws.cell(row = iRow, column = 2).value,
             crossRefs = [
@@ -700,37 +700,37 @@ def getModelFromExcel(filename):
             ))
             
     '''set component indices'''
-    mdl.setComponentIndices()
+    model.setComponentIndices()
             
     '''deserialize references'''
     undefinedComponents = []
     
     #species concentration 
-    for species in mdl.species:
+    for species in model.species:
         for conc in species.concentrations:
             id = conc.compartment            
-            obj = mdl.getComponentById(id)
+            obj = model.getComponentById(id)
             if id and obj is None:
                 undefinedComponents.append(id)
             conc.compartment = obj                
             
     #reaction submodel, participant species, participant compartments, enzymes
-    for reaction in mdl.reactions:
+    for reaction in model.reactions:
         id = reaction.submodel        
-        obj = mdl.getComponentById(id)
+        obj = model.getComponentById(id)
         if id and obj is None:
             undefinedComponents.append(id)
         reaction.submodel = obj
         
         for part in reaction.participants:
             id = part.species            
-            obj = mdl.getComponentById(id)
+            obj = model.getComponentById(id)
             if id and obj is None:               
                 undefinedComponents.append(id)
             part.species = obj
                 
             id = part.compartment            
-            obj = mdl.getComponentById(id)
+            obj = model.getComponentById(id)
             if id and obj is None:
                 undefinedComponents.append(id)
             part.compartment = obj
@@ -738,16 +738,16 @@ def getModelFromExcel(filename):
             part.calcIdName()
         
         id = reaction.enzyme
-        obj = mdl.getComponentById(id)
+        obj = model.getComponentById(id)
         if id and obj is None:
             undefinedComponents.append(id)
         reaction.enzyme = obj
 
     #parameter submodels
-    for param in mdl.parameters:
+    for param in model.parameters:
         id = param.submodel
         if id:
-            obj = mdl.getComponentById(id)
+            obj = model.getComponentById(id)
             if obj is None:
                 undefinedComponents.append(id)
             param.submodel = obj
@@ -758,48 +758,48 @@ def getModelFromExcel(filename):
         raise Exception('Undefined components:\n- %s' % ('\n- '.join(undefinedComponents)))
         
     ''' Assemble back rerferences'''
-    for submdl in mdl.submodels:
-        submdl.reactions = []
-        submdl.species = []
-        submdl.parameters = []
-    for rxn in mdl.reactions:
+    for subModel in model.submodels:
+        subModel.reactions = []
+        subModel.species = []
+        subModel.parameters = []
+    for rxn in model.reactions:
         rxn.submodel.reactions.append(rxn)
         for part in rxn.participants:
             rxn.submodel.species.append('%s[%s]' % (part.species.id, part.compartment.id))
         if rxn.enzyme:
             rxn.submodel.species.append('%s[%s]' % (rxn.enzyme.id, 'c'))
         if rxn.rateLaw:
-            rxn.submodel.species += rxn.rateLaw.getModifiers(mdl.species, mdl.compartments)
+            rxn.submodel.species += rxn.rateLaw.getModifiers(model.species, model.compartments)
     
-    for param in mdl.parameters:
+    for param in model.parameters:
         if param.submodel:
             param.submodel.parameters.append(param)
             
-    for submdl in mdl.submodels:
-        speciesStrArr = list(set(submdl.species))
+    for subModel in model.submodels:
+        speciesStrArr = list(set(subModel.species))
         speciesStrArr.sort()
-        submdl.species = []
+        subModel.species = []
         for index, speciesStr in enumerate(speciesStrArr):
             speciesId, compId = speciesStr.split('[')
             compId = compId[0:-1]
             speciesComp = SpeciesCompartment(
                 index = index,
-                species = mdl.getComponentById(speciesId),
-                compartment = mdl.getComponentById(compId),
+                species = model.getComponentById(speciesId),
+                compartment = model.getComponentById(compId),
                 )
             speciesComp.calcIdName()
-            submdl.species.append(speciesComp)
+            subModel.species.append(speciesComp)
             
     '''Transcode rate laws'''
-    for rxn in mdl.reactions:
+    for rxn in model.reactions:
         if rxn.rateLaw:
-            rxn.rateLaw.transcode(mdl.species, mdl.compartments)
+            rxn.rateLaw.transcode(model.species, model.compartments)
         
     '''Prepare submodels for computation'''
-    mdl.setupSimulation()
+    model.setupSimulation()
         
     '''Return'''
-    return mdl
+    return model
     
 #Parse a string representing the stoichiometry of a reaction into a Python object
 def parseStoichiometry(rxnStr):
