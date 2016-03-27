@@ -7,7 +7,7 @@ Analysis utility functions
 
 #required libraries
 from matplotlib.backends.backend_pdf import PdfPages
-from model import Submodel
+from model import Model, Submodel
 from util import N_AVOGADRO
 import matplotlib.pyplot as pyplot
 import numpy as np
@@ -15,7 +15,7 @@ import re
 
 def plot(model, time = np.zeros(0), 
     speciesCounts = None, volume = np.zeros(0), extracellularVolume = np.zeros(0),
-    selectedSpecies = [], units = 'mM', title = '', fileName = ''):
+    selectedSpeciesCompartments = [], units = 'mM', title = '', fileName = ''):
 
     #convert time to hours
     time = time.copy() / 3600
@@ -26,12 +26,20 @@ def plot(model, time = np.zeros(0),
     #plot results
     yMin = 1e12
     yMax = -1e12
-    for speciesId in selectedSpecies:
+    for speciesCompartmentId in selectedSpeciesCompartments:
         #extract data
-        match = re.match('^(?P<speciesId>[a-z0-9\-_]+)\[(?P<compartmentId>[a-z0-9\-_]+)\]$', speciesId, re.I).groupdict()
+        match = re.match('^(?P<speciesId>[a-z0-9\-_]+)\[(?P<compartmentId>[a-z0-9\-_]+)\]$', speciesCompartmentId, re.I).groupdict()
+        speciesId = match['speciesId']
         compartmentId = match['compartmentId']
 
-        yData = speciesCounts[speciesId]
+        if isinstance(model, Model):
+            species = model.getComponentById(speciesId)
+            compartment = model.getComponentById(compartmentId)
+            yData = speciesCounts[species.index, compartment.index, :]
+        elif isinstance(model, Submodel):
+            yData = speciesCounts[speciesCompartmentId]
+        else:
+            raise Exception('Invalid model type %s' % model.__class__.__name__)
             
         #scale
         if compartmentId == 'c':
@@ -61,7 +69,7 @@ def plot(model, time = np.zeros(0),
         yMax = max(yMax, np.max(yData))
 
         #add to plot
-        pyplot.plot(time, yData, label=speciesId)
+        pyplot.plot(time, yData, label=speciesCompartmentId)
         
     #set axis limits
     pyplot.xlim((0, time[-1]))
@@ -78,7 +86,7 @@ def plot(model, time = np.zeros(0),
     else:
         pyplot.ylabel('Concentration (%s)' % units)
     
-    if len(selectedSpecies) > 1:
+    if len(selectedSpeciesCompartments) > 1:
         pyplot.legend()
 
     #save

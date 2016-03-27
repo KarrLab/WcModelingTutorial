@@ -135,7 +135,7 @@ def analyzeResults(model, time, volume, extracellularVolume, speciesCounts):
         extracellularVolume = extracellularVolume, 
         speciesCounts = speciesCounts, 
         units = 'mM',
-        selectedSpecies = ['ATP[c]', 'CTP[c]', 'GTP[c]', 'UTP[c]'], 
+        selectedSpeciesCompartments = ['ATP[c]', 'CTP[c]', 'GTP[c]', 'UTP[c]'], 
         fileName = os.path.join(OUTPUT_DIRECTORY, 'NTPs.pdf')
         )
 
@@ -145,7 +145,7 @@ def analyzeResults(model, time, volume, extracellularVolume, speciesCounts):
         volume = volume, 
         extracellularVolume = extracellularVolume, 
         speciesCounts = speciesCounts, 
-        selectedSpecies = ['ALA[c]', 'ARG[c]', 'ASN[c]', 'ASP[c]'], 
+        selectedSpeciesCompartments = ['ALA[c]', 'ARG[c]', 'ASN[c]', 'ASP[c]'], 
         units = 'uM',
         fileName = os.path.join(OUTPUT_DIRECTORY, 'Amino acids.pdf')
         )       
@@ -157,7 +157,7 @@ def analyzeResults(model, time, volume, extracellularVolume, speciesCounts):
         extracellularVolume = extracellularVolume, 
         speciesCounts = speciesCounts, 
         units = 'molecules',
-        selectedSpecies = ['Adk-Protein[c]', 'Apt-Protein[c]', 'Cmk-Protein[c]'], 
+        selectedSpeciesCompartments = ['Adk-Protein[c]', 'Apt-Protein[c]', 'Cmk-Protein[c]'], 
         fileName = os.path.join(OUTPUT_DIRECTORY, 'Proteins.pdf')
         )
         
