@@ -9,7 +9,7 @@ Analysis utility functions
 from matplotlib.backends.backend_pdf import PdfPages
 from model import Model, Submodel
 from util import N_AVOGADRO
-import matplotlib.pyplot as pyplot
+from matplotlib import pyplot, ticker
 import numpy as np
 import re
 
@@ -93,6 +93,9 @@ def plot(model, time = np.zeros(0),
         pyplot.ylabel('Copy number')
     else:
         pyplot.ylabel('Concentration (%s)' % units)
+        
+    y_formatter = ticker.ScalarFormatter(useOffset=False)
+    pyplot.gca().get_yaxis().set_major_formatter(y_formatter)
     
     if len(selectedSpeciesCompartments) > 1:
         pyplot.legend()
