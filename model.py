@@ -313,7 +313,7 @@ class FbaSubmodel(Submodel):
         
         #external nutrients availability
         for exSpecies in self.exchangedSpecies:
-            upperBounds[exSpecies.reactionIndex] = np.minimum(upperBounds[exSpecies.reactionIndex], self.speciesCounts[exSpecies.id])
+            upperBounds[exSpecies.reactionIndex] = max(0, np.minimum(upperBounds[exSpecies.reactionIndex], self.speciesCounts[exSpecies.id]))
         
         #exchange bounds
         lowerBounds = util.nanminimum(lowerBounds, self.dryWeight / 3600 * N_AVOGADRO * 1e-3 * self.exchangeRateBounds['lower']) * timeStep
