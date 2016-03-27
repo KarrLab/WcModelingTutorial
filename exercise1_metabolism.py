@@ -23,7 +23,6 @@ OUTPUT_DIRECTORY = 'out/exercise1_metabolism'
 def simulate(model):
     #Get metabolism submodel
     subModel = model.getComponentById('Metabolism')
-    cellComp = model.getComponentById('c')
 
     #parameters
     cellCycleLength = model.getComponentById('cellCycleLength').value

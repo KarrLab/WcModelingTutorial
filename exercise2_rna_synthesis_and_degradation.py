@@ -27,11 +27,9 @@ def simulate(model):
     #Get transcription, RNA degradation submodels
     transcriptionSubmodel = model.getComponentById('Transcription')
     rnaDegradationSubmodel = model.getComponentById('RnaDegradation')
-    cellComp = model.getComponentById('c')
 
     #get parameters
     cellCycleLength = model.getComponentById('cellCycleLength').value
-    rnaHalfLife = model.getComponentById('rnaHalfLife').value
     
     #seed random number generator to generate reproducible results
     random.seed(RANDOM_SEED)
