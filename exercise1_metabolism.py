@@ -17,7 +17,7 @@ import os
 MODEL_FILENAME = 'data/Model.xlsx'
 TIME_STEP = 10 #time step on simulation (s)
 TIME_STEP_RECORD = TIME_STEP #Frequency at which to observe predicted cell state (s)
-OUTPUT_DIRECTORY = 'out/exercise1_metabolism_submodel'
+OUTPUT_DIRECTORY = 'out/exercise1_metabolism'
 
 #simulates model
 def simulate(model):
@@ -122,6 +122,9 @@ def simulate(model):
     
 #plot results
 def analyzeResults(model, time, volume, extracellularVolume, speciesCounts):
+    if not os.path.exists(OUTPUT_DIRECTORY):
+        os.makedirs(OUTPUT_DIRECTORY)
+
     subModel = model.getComponentById('Metabolism')
     
     analysis.plot(
