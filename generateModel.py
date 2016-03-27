@@ -30,7 +30,7 @@ concPi = 5e-3 #[Pi](M)
 concH2O = 55 #[H2O] (M)
 concH = 1.1220e-08 # [H] (M)
 nRnaCopy = 5. #Copy numbers of RNA
-nProtCopy = 1000. #copy numbers of proteins
+nProtCopy = 100. #copy numbers of proteins
 cellCycleLength = 8 * 60 * 60. #(s)
 rnaHalfLife = 5 * 60. #(s)
 
@@ -423,3 +423,6 @@ def generateRandomSequence(protLen = 100, startCodon = 'ATG', stopCodon = 'TAG')
     dnaSeqStr += stopCodon
         
     return Seq(dnaSeqStr)
+    
+if __name__ == "__main__":
+    run()
