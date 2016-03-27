@@ -71,21 +71,22 @@ def simulate(model):
 
     #Initialize history
     timeMax = cellCycleLength #(s)
-    nTimeSteps = int(timeMax / TIME_STEP_RECORD + 1)
-    timeHist = np.linspace(0, timeMax, num = nTimeSteps)
+    nTimeSteps= int(timeMax / TIME_STEP + 1)
+    nTimeStepsRecord = int(timeMax / TIME_STEP_RECORD + 1)
+    timeHist = np.linspace(0, timeMax, num = nTimeStepsRecord)
 
-    volumeHist = np.full(nTimeSteps, np.nan)
+    volumeHist = np.full(nTimeStepsRecord, np.nan)
     volumeHist[0] = volume
 
-    extracellularVolumeHist = np.full(nTimeSteps, np.nan)
+    extracellularVolumeHist = np.full(nTimeStepsRecord, np.nan)
     extracellularVolumeHist[0] = extracellularVolume
 
-    growthHist = np.full(nTimeSteps, np.nan)
+    growthHist = np.full(nTimeStepsRecord, np.nan)
     growthHist[0] = subModel.cobraModel.solution.x[subModel.biomassProductionReaction['index']]
 
     speciesCountsHist = {}
     for species in subModel.species:
-        speciesCountsHist[species.id] = np.full(nTimeSteps, np.nan)
+        speciesCountsHist[species.id] = np.full(nTimeStepsRecord, np.nan)
         speciesCountsHist[species.id][0] = speciesCounts[species.id]
             
     #Simulate dynamics
