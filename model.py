@@ -10,6 +10,7 @@ from cobra import Metabolite as CobraMetabolite
 from cobra import Model as CobraModel
 from cobra import Reaction as CobraReaction
 from itertools import chain
+from numpy import random
 from openpyxl import load_workbook
 from util import N_AVOGADRO
 import math
@@ -29,7 +30,7 @@ class Model:
     density = None
     fractionDryWeight = None
     
-    speciesCounts = np.zeros((0, 0)) #rows: species, columns: compartments
+    speciesCounts = np.zeros(0) #rows: species, columns: compartments
     mass = None #cell mass
     dryWeight = None #cell dry weight
     volume = None #cell volume
@@ -44,7 +45,7 @@ class Model:
         self.references = references       
         
     def setupSimulation(self):
-        self.fractionDryWeight = self.getComponentById('fractionDryWeight').value
+        self.fractionDryWeight = self.getComponentById('fractionDryWeight', self.parameters).value
     
         for subModel in self.submodels:
             subModel.setupSimulation()
@@ -52,8 +53,8 @@ class Model:
         self.calcInitialConditions()
             
     def calcInitialConditions(self):
-        cellComp = self.getComponentById('c')
-        extrComp = self.getComponentById('e')
+        cellComp = self.getComponentById('c', self.compartments)
+        extrComp = self.getComponentById('e', self.compartments)
         
         #volume
         self.volume = cellComp.initialVolume
@@ -106,8 +107,74 @@ class Model:
         for index, obj in enumerate(self.references):
             obj.index = index
         
-    def getComponentById(self, id):
-        components = chain(self.submodels, self.compartments, self.species, self.reactions, self.parameters, self.references)
+    #get species counts as dictionary
+    def getSpeciesCountsDict(self):           
+        speciesCountsDict = {}
+        for species in self.species:
+            for compartment in self.compartments:
+                speciesCountsDict['%s[%s]' % (species.id, compartment.id)] = self.speciesCounts[species.index, compartment.index]                
+        return speciesCountsDict
+    
+    #set species counts for dictionary
+    def setSpeciesCountsDict(self, speciesCountsDict):
+        for species in self.species:
+            for compartment in self.compartments:
+                self.speciesCounts[species.index, compartment.index] = speciesCountsDict['%s[%s]' % (species.id, compartment.id)]
+                
+    #get species concentrations
+    def getSpeciesConcentrations(self):
+        return self.speciesCounts / self.getSpeciesVolumes() / N_AVOGADRO
+        
+    #get species concentrations
+    def getSpeciesConcentrationsDict(self):
+        concs = self.getSpeciesConcentrations()
+        speciesConcsDict = {}
+        for species in self.species:
+            for compartment in self.compartments:
+                speciesConcsDict['%s[%s]' % (species.id, compartment.id)] = concs[species.index, compartment.index]                
+        return speciesConcsDict
+    
+    #get container volumes for each species
+    def getSpeciesVolumes(self):
+        cellComp = self.getComponentById('c', self.compartments)
+        extracellularComp = self.getComponentById('e', self.compartments)
+        
+        volumes = np.zeros((len(self.species), len(self.compartments)))
+        volumes[:, cellComp.index] = self.volume
+        volumes[:, extracellularComp.index] = self.extracellularVolume
+        return volumes
+        
+    #get species counts as dictionary
+    def getSpeciesVolumesDict(self):  
+        volumes = self.getSpeciesVolumes()         
+        volumesDict = {}
+        for species in self.species:
+            for compartment in self.compartments:
+                volumesDict['%s[%s]' % (species.id, compartment.id)] = volumes[species.index, compartment.index]                
+        return volumesDict
+    
+    #get total RNA number        
+    def getTotalRnaCount(self):
+        cellComp = self.getComponentById('c', self.compartments)
+        tot = 0
+        for species in self.species:
+            if species.type == 'RNA':
+               tot += self.speciesCounts[species.index, cellComp.index]
+        return tot
+         
+    #get total protein copy number
+    def getTotalProteinCount(self):
+        cellComp = self.getComponentById('c', self.compartments)
+        tot = 0
+        for species in self.species:
+            if species.type == 'Protein':
+               tot += self.speciesCounts[species.index, cellComp.index]
+        return tot
+    
+    def getComponentById(self, id, components = None):
+        if not components:
+            components = chain(self.submodels, self.compartments, self.species, self.reactions, self.parameters, self.references)
+            
         for component in components:
             if component.id == id:
                 return component
@@ -123,14 +190,16 @@ class Submodel:
     species = []
     parameters = []
     
-    speciesCounts = np.zeros((0, 0))
+    speciesCounts = np.zeros(0)
+    volume = np.zeros(0)
+    extracellularVolume = np.zeros(0)
     
     def __init__(self, id = '', name = '', reactions = [], species = []):
         self.id = id
         self.name = name
         self.reactions = reactions
         self.species = species
-    
+        
     def setupSimulation(self):
         #initialize species counts dictionary
         self.speciesCounts = {}
@@ -141,27 +210,56 @@ class Submodel:
     def updateLocalCellState(self, model):
         for species in self.species:
             self.speciesCounts[species.id] = model.speciesCounts[species.species.index, species.compartment.index]
+        self.volume = model.volume
+        self.extracellularVolume = model.extracellularVolume
     
     #sets global species counts from local species counts 
     def updateGlobalCellState(self, model):
         for species in self.species:
             model.speciesCounts[species.species.index, species.compartment.index] = self.speciesCounts[species.id]
+            
+    #get species concentrations
+    def getSpeciesConcentrations(self):
+        volumes = self.getSpeciesVolumes()
+        concs = {}
+        for species in self.species:
+            concs[species.id] = self.speciesCounts[species.id] / volumes[species.index] / N_AVOGADRO
+        return concs
         
+    #get container volumes for each species
+    def getSpeciesVolumes(self):
+        volumes = {}
+        for species in self.species:
+            if species.compartment.id == 'c':
+                volumes[species.index] = self.volume
+            else:
+                volumes[species.index] = self.extracellularVolume
+        return volumes
+            
     #runs simulation
     def simulate(self):
         pass
         
-    #Evaluate rate laws for each reaction
-    def calcReactionRates(self):
-        rates = np.full((len(self.reactions)), np.nan)
-        for iRxn, rxn in enumerate(self.reactions):          
+    #calculate reaction rates
+    @staticmethod
+    def calcReactionRates(reactions, speciesConcentrations):
+        rates = np.full(len(reactions), np.nan)
+        for iRxn, rxn in enumerate(reactions):          
             if rxn.rateLaw:
-                rates[iRxn] = eval(rxn.rateLaw.transcoded, {}, {'speciesCounts': self.speciesCounts, 'Vmax': rxn.vmax, 'Km': rxn.km})
-            
+                rates[iRxn] = eval(rxn.rateLaw.transcoded, {}, {'speciesConcentrations': speciesConcentrations, 'Vmax': rxn.vmax, 'Km': rxn.km})
         return rates
+               
+    #update species counts based on a reaction
+    @staticmethod
+    def executeReaction(speciesCounts, reaction):
+        for part in reaction.participants:
+            speciesCounts[part.id] += part.coefficient
+        return speciesCounts
+    
+    def getComponentById(self, id, components = None):
+        if not components:
+            components = chain(self.species, self.reactions, self.parameters)
         
-    def getComponentById(self, id):
-        components = chain(self.species, self.reactions, self.parameters)
         for component in components:
             if component.id == id:
                 return component
@@ -249,14 +347,14 @@ class FbaSubmodel(Submodel):
             }
         
         #exchange reactions
-        carbonExRate = self.getComponentById('carbonExchangeRate').value
-        nonCarbonExRate = self.getComponentById('nonCarbonExchangeRate').value
+        carbonExRate = self.getComponentById('carbonExchangeRate', self.parameters).value
+        nonCarbonExRate = self.getComponentById('nonCarbonExchangeRate', self.parameters).value
         self.exchangeRateBounds = {
-            'lower': np.full((len(cobraModel.reactions)), -np.nan),
-            'upper': np.full((len(cobraModel.reactions)),  np.nan),
+            'lower': np.full(len(cobraModel.reactions), -np.nan),
+            'upper': np.full(len(cobraModel.reactions),  np.nan),
             }
         for exSpecies in self.exchangedSpecies:
-            if self.getComponentById(exSpecies.id).species.containsCarbon():
+            if self.getComponentById(exSpecies.id, self.species).species.containsCarbon():
                 self.exchangeRateBounds['lower'][exSpecies.reactionIndex] = -carbonExRate
                 self.exchangeRateBounds['upper'][exSpecies.reactionIndex] =  carbonExRate
             else:
@@ -266,7 +364,7 @@ class FbaSubmodel(Submodel):
         '''Setup reactions'''
         self.biomassProductionReaction = {
             'index': cobraModel.reactions.index(cobraModel.reactions.get_by_id('BiomassProduction')),
-            'reaction': self.getComponentById('BiomassProduction'),
+            'reaction': self.getComponentById('BiomassProduction', self.reactions),
             }
             
     def updateLocalCellState(self, model):
@@ -309,7 +407,10 @@ class FbaSubmodel(Submodel):
         upperBounds = self.thermodynamicBounds['upper']
         
         #rate laws
-        upperBounds[0:len(self.reactions)] = util.nanminimum(upperBounds[0:len(self.reactions)], self.calcReactionRates()) * timeStep
+        upperBounds[0:len(self.reactions)] = util.nanminimum(
+            upperBounds[0:len(self.reactions)], 
+            self.calcReactionRates(self.reactions, self.getSpeciesConcentrations()) * self.volume * N_AVOGADRO,
+            ) * timeStep
         
         #external nutrients availability
         for exSpecies in self.exchangedSpecies:
@@ -330,6 +431,49 @@ class SsaSubmodel(Submodel):
         
     def setupSimulation(self):
         Submodel.setupSimulation(self)
+        
+    def simulate(self, timeStep):
+        self.speciesCounts = self.stochasticSimulationAlgorithm(self.speciesCounts, self.getSpeciesVolumes(), self.reactions, self.volume, timeStep)   
+        
+    @staticmethod
+    def stochasticSimulationAlgorithm(speciesCounts, speciesVolumes, reactions, volume, timeMax):
+        if len(reactions) >= 1 and not isinstance(reactions[0], list):
+            reactions = [reactions]
+            
+        nSubmodels = len(reactions)
+
+        time = 0
+        while time < timeMax:
+            #calculate concentrations
+            speciesConcentrations = {}
+            for id, cnt in speciesCounts.iteritems():
+                speciesConcentrations[id] = speciesCounts[id] / speciesVolumes[id] / N_AVOGADRO
+        
+            #calculate propensities
+            totalPropensities = np.zeros(nSubmodels)
+            reactionPropensities = []
+            for iSubmodel in range(nSubmodels):
+                p = np.maximum(0, Submodel.calcReactionRates(reactions[iSubmodel], speciesConcentrations) * volume * N_AVOGADRO)
+                totalPropensities[iSubmodel] = np.sum(p)
+                reactionPropensities.append(p)
+            
+            #Select time to next reaction from exponential distribution
+            dt = random.exponential(1/np.sum(totalPropensities))
+            if time + dt > timeMax:
+                if random.rand() > (timeMax - time) / dt:                
+                    break
+                else:
+                    dt = timeMax - time
+            
+            #Select next reaction
+            iSubmodel = random.choice(nSubmodels, p = totalPropensities / np.sum(totalPropensities))                    
+            iRxn = random.choice(len(reactionPropensities[iSubmodel]), p = reactionPropensities[iSubmodel] / totalPropensities[iSubmodel])
+
+            #update time and execute reaction
+            time += dt
+            speciesCounts = Submodel.executeReaction(speciesCounts, reactions[iSubmodel][iRxn])
+                
+        return speciesCounts
         
 #Represents a compartment
 class Compartment:
@@ -552,8 +696,8 @@ class RateLaw:
     #get modifiers of rate law
     def getModifiers(self, species, compartments):
         modifiers = []        
-        for comp in compartments:
-            for spec in species:
+        for spec in species:
+            for comp in compartments:
                 id = '%s[%s]' % (spec.id, comp.id)
                 if self.native.find(id) != -1:
                     modifiers.append(id)
@@ -563,10 +707,10 @@ class RateLaw:
     def transcode(self, species, compartments):
         self.transcoded = self.native
         
-        for comp in compartments:
-            for spec in species:
+        for spec in species:
+            for comp in compartments:
                 id = '%s[%s]' % (spec.id, comp.id)
-                self.transcoded = self.transcoded.replace(id, "speciesCounts['%s']" % id)
+                self.transcoded = self.transcoded.replace(id, "speciesConcentrations['%s']" % id)
         
 #Represents a cross reference to an external database
 class CrossReference:
@@ -714,7 +858,7 @@ def getModelFromExcel(filename):
     for species in model.species:
         for conc in species.concentrations:
             id = conc.compartment            
-            obj = model.getComponentById(id)
+            obj = model.getComponentById(id, model.compartments)
             if id and obj is None:
                 undefinedComponents.append(id)
             conc.compartment = obj                
@@ -722,20 +866,20 @@ def getModelFromExcel(filename):
     #reaction submodel, participant species, participant compartments, enzymes
     for reaction in model.reactions:
         id = reaction.submodel        
-        obj = model.getComponentById(id)
+        obj = model.getComponentById(id, model.submodels)
         if id and obj is None:
             undefinedComponents.append(id)
         reaction.submodel = obj
         
         for part in reaction.participants:
             id = part.species            
-            obj = model.getComponentById(id)
+            obj = model.getComponentById(id, model.species)
             if id and obj is None:               
                 undefinedComponents.append(id)
             part.species = obj
                 
             id = part.compartment            
-            obj = model.getComponentById(id)
+            obj = model.getComponentById(id, model.compartments)
             if id and obj is None:
                 undefinedComponents.append(id)
             part.compartment = obj
@@ -743,7 +887,7 @@ def getModelFromExcel(filename):
             part.calcIdName()
         
         id = reaction.enzyme
-        obj = model.getComponentById(id)
+        obj = model.getComponentById(id, model.species)
         if id and obj is None:
             undefinedComponents.append(id)
         reaction.enzyme = obj
@@ -752,7 +896,7 @@ def getModelFromExcel(filename):
     for param in model.parameters:
         id = param.submodel
         if id:
-            obj = model.getComponentById(id)
+            obj = model.getComponentById(id, model.submodels)
             if obj is None:
                 undefinedComponents.append(id)
             param.submodel = obj
@@ -789,8 +933,8 @@ def getModelFromExcel(filename):
             compId = compId[0:-1]
             speciesComp = SpeciesCompartment(
                 index = index,
-                species = model.getComponentById(speciesId),
-                compartment = model.getComponentById(compId),
+                species = model.getComponentById(speciesId, model.species),
+                compartment = model.getComponentById(compId, model.compartments),
                 )
             speciesComp.calcIdName()
             subModel.species.append(speciesComp)
