@@ -1,3 +1,4 @@
 *.pyc
 data/*.fasta
+data/Model-RNA and proteins.xlsx
 out
