@@ -25,7 +25,7 @@ def simulate(model):
     subModel = model.getComponentById('Metabolism')
     cellComp = model.getComponentById('c')
 
-    #Get cell cycle length
+    #parameters
     cellCycleLength = model.getComponentById('cellCycleLength').value
     rnaHalfLife = model.getComponentById('rnaHalfLife').value    
 
