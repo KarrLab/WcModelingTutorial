@@ -227,7 +227,7 @@ def run(protLen = 100, startCodon = 'ATG', stopCodon = 'TAG'):
             gene['id'],
             len(rnaSeqs[iGene].seq), )
         rxnWs['E%d' % (iGene + 2)] = 'RnaPolymerase-Protein' #enzyme
-        rxnWs['F%d' % (iGene + 2)] = 'Vmax * min(ATP[c], CTP[c], GTP[c], UTP[c]) / (Km + min(ATP[c], CTP[c], GTP[c], UTP[c])) * RnaPol-Protein[c]' #rate law
+        rxnWs['F%d' % (iGene + 2)] = 'Vmax * min(ATP[c], CTP[c], GTP[c], UTP[c]) / (Km + min(ATP[c], CTP[c], GTP[c], UTP[c])) * RnaPolymerase-Protein[c]' #rate law
         rxnWs['G%d' % (iGene + 2)] = math.log(2) * (1 / rnaHalfLife + 1 / cellCycleLength) * 2 * nRnaCopy / nProtCopy #Vmax
         rxnWs['H%d' % (iGene + 2)] = concNxp #Km
         rxnWs['I%d' % (iGene + 2)] = 'EC' #Cross reference source
