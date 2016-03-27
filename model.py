@@ -273,13 +273,13 @@ class FbaSubmodel(Submodel):
         Submodel.updateLocalCellState(self, model)
         self.dryWeight = model.dryWeight
                 
-    def simulate(self):
-        fluxes = self.calcFluxes()
+    def simulate(self, timeStep = 1):
+        fluxes = self.calcFluxes(timeStep)
         self.updateMetabolites(fluxes)
         
-    def calcFluxes(self):
+    def calcFluxes(self, timeStep = 1):
         '''calc and set bounds'''
-        bounds = self.calcBounds()
+        bounds = self.calcBounds(timeStep)
         arrCbModel = self.cobraModel.to_array_based_model()
         arrCbModel.lower_bounds = bounds['lower']
         arrCbModel.upper_bounds = bounds['upper']
@@ -300,7 +300,7 @@ class FbaSubmodel(Submodel):
         for exSpecies in self.exchangedSpecies:
             self.speciesCounts[exSpecies.id] += fluxes[exSpecies.reactionIndex]
         
-    def calcBounds(self):
+    def calcBounds(self,  timeStep = 1):
         cobraModel = self.cobraModel
         arMdl = cobraModel.to_array_based_model()
         
@@ -309,15 +309,15 @@ class FbaSubmodel(Submodel):
         upperBounds = self.thermodynamicBounds['upper']
         
         #rate laws
-        upperBounds[0:len(self.reactions)] = util.nanminimum(upperBounds[0:len(self.reactions)], self.calcReactionRates())        
+        upperBounds[0:len(self.reactions)] = util.nanminimum(upperBounds[0:len(self.reactions)], self.calcReactionRates()) * timeStep
         
         #external nutrients availability
         for exSpecies in self.exchangedSpecies:
             upperBounds[exSpecies.reactionIndex] = np.minimum(upperBounds[exSpecies.reactionIndex], self.speciesCounts[exSpecies.id])
         
         #exchange bounds
-        lowerBounds = util.nanminimum(lowerBounds, self.dryWeight / 3600 * N_AVOGADRO * 1e-3 * self.exchangeRateBounds['lower'])
-        upperBOunds = util.nanminimum(upperBounds, self.dryWeight / 3600 * N_AVOGADRO * 1e-3 * self.exchangeRateBounds['upper'])
+        lowerBounds = util.nanminimum(lowerBounds, self.dryWeight / 3600 * N_AVOGADRO * 1e-3 * self.exchangeRateBounds['lower']) * timeStep
+        upperBOunds = util.nanminimum(upperBounds, self.dryWeight / 3600 * N_AVOGADRO * 1e-3 * self.exchangeRateBounds['upper']) * timeStep
         
         #return
         return {'lower': lowerBounds, 'upper': upperBounds}
