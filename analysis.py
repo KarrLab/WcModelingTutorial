@@ -15,7 +15,9 @@ import re
 
 def plot(model, time = np.zeros(0), 
     speciesCounts = None, volume = np.zeros(0), extracellularVolume = np.zeros(0),
-    selectedSpeciesCompartments = [], units = 'mM', title = '', fileName = ''):
+    selectedSpeciesCompartments = [], 
+    yDatas = {},
+    units = 'mM', title = '', fileName = ''):
 
     #convert time to hours
     time = time.copy() / 3600
@@ -23,53 +25,59 @@ def plot(model, time = np.zeros(0),
     #create figure
     fig = pyplot.figure()
 
-    #plot results
+    #extract data to plot
+    if not yDatas:
+        yDatas = {}
+        for speciesCompartmentId in selectedSpeciesCompartments:
+            #extract data
+            match = re.match('^(?P<speciesId>[a-z0-9\-_]+)\[(?P<compartmentId>[a-z0-9\-_]+)\]$', speciesCompartmentId, re.I).groupdict()
+            speciesId = match['speciesId']
+            compartmentId = match['compartmentId']
+
+            if isinstance(model, Model):
+                species = model.getComponentById(speciesId)
+                compartment = model.getComponentById(compartmentId)
+                yData = speciesCounts[species.index, compartment.index, :]
+            elif isinstance(model, Submodel):
+                yData = speciesCounts[speciesCompartmentId]
+            else:
+                raise Exception('Invalid model type %s' % model.__class__.__name__)
+                
+            #scale
+            if compartmentId == 'c':
+                V = volume
+            else:
+                V = extracellularVolume
+            
+            if units == 'pM':
+                scale = 1 / N_AVOGADRO / V * 1e12
+            elif units == 'nM':
+                scale = 1 / N_AVOGADRO / V * 1e9
+            elif units == 'uM':
+                scale = 1 / N_AVOGADRO / V * 1e6
+            elif units == 'mM':
+                scale = 1 / N_AVOGADRO / V * 1e3
+            elif units == 'M':
+                scale = 1 / N_AVOGADRO / V * 1e0
+            elif units == 'molecules':
+                scale = 1
+            else:
+                raise Exception('Invalid units "%s"' % units)
+                
+            yData *= scale
+            
+            yDatas[speciesCompartmentId] = yData
+    
+    #plot results    
     yMin = 1e12
     yMax = -1e12
-    for speciesCompartmentId in selectedSpeciesCompartments:
-        #extract data
-        match = re.match('^(?P<speciesId>[a-z0-9\-_]+)\[(?P<compartmentId>[a-z0-9\-_]+)\]$', speciesCompartmentId, re.I).groupdict()
-        speciesId = match['speciesId']
-        compartmentId = match['compartmentId']
-
-        if isinstance(model, Model):
-            species = model.getComponentById(speciesId)
-            compartment = model.getComponentById(compartmentId)
-            yData = speciesCounts[species.index, compartment.index, :]
-        elif isinstance(model, Submodel):
-            yData = speciesCounts[speciesCompartmentId]
-        else:
-            raise Exception('Invalid model type %s' % model.__class__.__name__)
-            
-        #scale
-        if compartmentId == 'c':
-            V = volume
-        else:
-            V = extracellularVolume
-        
-        if units == 'pM':
-            scale = 1 / N_AVOGADRO / V * 1e12
-        elif units == 'nM':
-            scale = 1 / N_AVOGADRO / V * 1e9
-        elif units == 'uM':
-            scale = 1 / N_AVOGADRO / V * 1e6
-        elif units == 'mM':
-            scale = 1 / N_AVOGADRO / V * 1e3
-        elif units == 'M':
-            scale = 1 / N_AVOGADRO / V * 1e0
-        elif units == 'molecules':
-            scale = 1
-        else:
-            raise Exception('Invalid units "%s"' % units)
-            
-        yData *= scale
-        
+    for label, yData in yDatas.iteritems():
         #update range
         yMin = min(yMin, np.min(yData))
         yMax = max(yMax, np.max(yData))
 
         #add to plot
-        pyplot.plot(time, yData, label=speciesCompartmentId)
+        pyplot.plot(time, yData, label=label)
         
     #set axis limits
     pyplot.xlim((0, time[-1]))
