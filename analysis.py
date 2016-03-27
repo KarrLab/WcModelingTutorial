@@ -17,8 +17,8 @@ def plot(model, time = np.zeros(0),
     speciesCounts = None, volume = np.zeros(0), extracellularVolume = np.zeros(0),
     selectedSpecies = [], units = 'mM', title = '', fileName = ''):
 
-    #reshape time array for plotting and convert to hours
-    time = np.reshape(time.copy(), (-1, 1)) / 3600
+    #convert time to hours
+    time = time.copy() / 3600
     
     #create figure
     fig = pyplot.figure()
