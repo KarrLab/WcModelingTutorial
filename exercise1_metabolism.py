@@ -135,7 +135,7 @@ def analyzeResults(model, time, volume, extracellularVolume, speciesCounts):
         speciesCounts = speciesCounts, 
         units = 'mM',
         selectedSpecies = ['ATP[c]', 'CTP[c]', 'GTP[c]', 'UTP[c]'], 
-        fileName = os.path.join(OUTPUT_DIRECTORY, 'ntps.pdf')
+        fileName = os.path.join(OUTPUT_DIRECTORY, 'NTPs.pdf')
         )
 
     analysis.plot(
@@ -146,7 +146,7 @@ def analyzeResults(model, time, volume, extracellularVolume, speciesCounts):
         speciesCounts = speciesCounts, 
         selectedSpecies = ['ALA[c]', 'ARG[c]', 'ASN[c]', 'ASP[c]'], 
         units = 'uM',
-        fileName = os.path.join(OUTPUT_DIRECTORY, 'amino acids.pdf')
+        fileName = os.path.join(OUTPUT_DIRECTORY, 'Amino acids.pdf')
         )       
         
     analysis.plot(
