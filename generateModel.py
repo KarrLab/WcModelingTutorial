@@ -251,7 +251,7 @@ def run(protLen = 100, startCodon = 'ATG', stopCodon = 'TAG'):
             2 * len(protSeqs[iGene].seq),
             2 * len(protSeqs[iGene].seq),)
         rxnWs['E%d' % (iGene + 2 + nGene)] = 'Ribosome-Protein' #enzyme
-        rxnWs['F%d' % (iGene + 2 + nGene)] = 'Vmax * min(Ala[c], Arg[c], Asp[c], Asn[c], Cys[c], Gln[c], Glu[c], Gly[c], His[c], Ile[c], Leu[c], Lys[c], Met[c], Phe[c], Pro[c], Ser[c], Thr[c], Trp[c], Tyr[c], Val[c]) / (Km + min(Ala[c], Arg[c], Asp[c], Asn[c], Cys[c], Gln[c], Glu[c], Gly[c], His[c], Ile[c], Leu[c], Lys[c], Met[c], Phe[c], Pro[c], Ser[c], Thr[c], Trp[c], Tyr[c], Val[c])) * %s-Rna[c] * Ribosome-Protein[c]' % gene['id'] #rate law
+        rxnWs['F%d' % (iGene + 2 + nGene)] = 'Vmax * min(ALA[c], ARG[c], ASP[c], ASN[c], CYS[c], GLN[c], GLU[c], GLY[c], HIS[c], ILE[c], LEU[c], LYS[c], MET[c], PHE[c], PRO[c], SER[c], THR[c], TRP[c], TYR[c], VAL[c]) / (Km + min(ALA[c], ARG[c], ASP[c], ASN[c], CYS[c], GLN[c], GLU[c], GLY[c], HIS[c], ILE[c], LEU[c], LYS[c], MET[c], PHE[c], PRO[c], SER[c], THR[c], TRP[c], TYR[c], VAL[c])) * %s-Rna[c] * Ribosome-Protein[c]' % gene['id'] #rate law
         rxnWs['G%d' % (iGene + 2 + nGene)] = math.log(2) / cellCycleLength * 2 / nRnaCopy #Vmax
         rxnWs['H%d' % (iGene + 2 + nGene)] = concAa #Km
         rxnWs['I%d' % (iGene + 2 + nGene)] = 'EC' #Cross reference source
