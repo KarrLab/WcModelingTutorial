@@ -11,13 +11,11 @@ from cobra import Model as CobraModel
 from cobra import Reaction as CobraReaction
 from itertools import chain
 from openpyxl import load_workbook
+from util import N_AVOGADRO
 import math
 import numpy as np
 import util
 import re
-
-#constants
-N_AVOGADRO = 6.022e23 #Avogadro constant
 
 #Represents a model (submodels, compartments, species, reactions, parameters, references)
 class Model:
@@ -276,24 +274,31 @@ class FbaSubmodel(Submodel):
         self.dryWeight = model.dryWeight
                 
     def simulate(self):
+        fluxes = self.calcFluxes()
+        self.updateMetabolites(fluxes)
+        
+    def calcFluxes(self):
         '''calc and set bounds'''
-        lowerBounds, upperBounds = self.calcBounds()
+        bounds = self.calcBounds()
         arrCbModel = self.cobraModel.to_array_based_model()
-        arrCbModel.lower_bounds = lowerBounds
-        arrCbModel.upper_bounds = upperBounds
+        arrCbModel.lower_bounds = bounds['lower']
+        arrCbModel.upper_bounds = bounds['upper']
         
         '''calculate growth rate'''
         self.cobraModel.optimize()
-        growth = self.cobraModel.solution.x[self.biomassProductionReaction['index']] #fraction cell/s
         
-        '''update metabolite counts'''
+        return self.cobraModel.solution.x
+        
+    def updateMetabolites(self, fluxes):
+        growth = fluxes[self.biomassProductionReaction['index']] #fraction cell/s
+        
         #biomass production
         for part in self.biomassProductionReaction['reaction'].participants:
             self.speciesCounts[part.id] -= growth * part.coefficient
         
         #external nutrients
         for exSpecies in self.exchangedSpecies:
-            self.speciesCounts[exSpecies.id] += self.cobraModel.solution.x[exSpecies.reactionIndex]
+            self.speciesCounts[exSpecies.id] += fluxes[exSpecies.reactionIndex]
         
     def calcBounds(self):
         cobraModel = self.cobraModel
@@ -315,7 +320,7 @@ class FbaSubmodel(Submodel):
         upperBOunds = util.nanminimum(upperBounds, self.dryWeight / 3600 * N_AVOGADRO * 1e-3 * self.exchangeRateBounds['upper'])
         
         #return
-        return (lowerBounds, upperBounds)
+        return {'lower': lowerBounds, 'upper': upperBounds}
         
 #Represents an SSA submodel
 class SsaSubmodel(Submodel):
