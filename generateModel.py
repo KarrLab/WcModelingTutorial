@@ -1,3 +1,5 @@
+#!/usr/bin/python
+
 '''
 Generates the random components of the example model:
 - Random RNA and protein species for each gene in the model
@@ -15,11 +17,11 @@ from Bio.SeqRecord import SeqRecord
 from numpy import random
 from openpyxl import Workbook
 from openpyxl.styles import Color, PatternFill
+from util import N_AVOGADRO
 import math
 import numpy as np
 
 #model parameters
-N_AVOGADRO = 6.022e23 #Avogadro constant
 cellVol = 4.58e-17 #volume (L)
 concAa = 0.5e-3 #[ALA], [ARG], [CYS], ... (M)
 concNxp = 1e-3 #[NTP], [NDP], [NMP] (M)
