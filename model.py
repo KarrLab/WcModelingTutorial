@@ -17,6 +17,7 @@ import math
 import numpy as np
 import util
 import re
+import warnings
 
 #Represents a model (submodels, compartments, species, reactions, parameters, references)
 class Model:
@@ -723,7 +724,9 @@ class CrossReference:
 
 #Reads model from Excel file into a Python object
 def getModelFromExcel(filename):
-    wb = load_workbook(filename = filename)
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", "Discarded range with reserved name", UserWarning)
+        wb = load_workbook(filename = filename)
 
     #initialize model object
     model = Model()
