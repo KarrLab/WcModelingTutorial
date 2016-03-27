@@ -252,7 +252,7 @@ def run(protLen = 100, startCodon = 'ATG', stopCodon = 'TAG'):
             2 * len(protSeqs[iGene].seq),)
         rxnWs['E%d' % (iGene + 2 + nGene)] = 'Ribosome-Protein' #enzyme
         rxnWs['F%d' % (iGene + 2 + nGene)] = 'Vmax * min(ALA[c], ARG[c], ASP[c], ASN[c], CYS[c], GLN[c], GLU[c], GLY[c], HIS[c], ILE[c], LEU[c], LYS[c], MET[c], PHE[c], PRO[c], SER[c], THR[c], TRP[c], TYR[c], VAL[c]) / (Km + min(ALA[c], ARG[c], ASP[c], ASN[c], CYS[c], GLN[c], GLU[c], GLY[c], HIS[c], ILE[c], LEU[c], LYS[c], MET[c], PHE[c], PRO[c], SER[c], THR[c], TRP[c], TYR[c], VAL[c])) * %s-Rna[c] * Ribosome-Protein[c]' % gene['id'] #rate law
-        rxnWs['G%d' % (iGene + 2 + nGene)] = math.log(2) / cellCycleLength * 2 / nRnaCopy #Vmax
+        rxnWs['G%d' % (iGene + 2 + nGene)] = math.log(2) / cellCycleLength * 2 / (nRnaCopy / cellVol / N_AVOGADRO) #Vmax
         rxnWs['H%d' % (iGene + 2 + nGene)] = concAa #Km
         rxnWs['I%d' % (iGene + 2 + nGene)] = 'EC' #Cross reference source
         rxnWs['J%d' % (iGene + 2 + nGene)] = '2.3.2.12' #Cross reference ID
