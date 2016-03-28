@@ -1,7 +1,7 @@
 #!/usr/bin/python
 
 '''
-Simulates metabolism submodel
+Simulates translation submodel
 
 @author Jonathan Karr, karr@mssm.edu
 @date 3/24/2016
@@ -20,7 +20,7 @@ MODEL_FILENAME = 'data/Model.xlsx'
 TIME_STEP = 10 #time step on simulation (s)
 TIME_STEP_RECORD = TIME_STEP #Frequency at which to observe predicted cell state (s)
 OUTPUT_DIRECTORY = 'out/exercise3_translation'
-RANDOM_SEED = 50000000000
+RANDOM_SEED = 0
 
 #simulates model
 def simulate(model):    

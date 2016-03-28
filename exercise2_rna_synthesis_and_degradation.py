@@ -1,7 +1,7 @@
 #!/usr/bin/python
 
 '''
-Simulates metabolism submodel
+Simulates transcription and RNA degradation submodels
 
 @author Jonathan Karr, karr@mssm.edu
 @date 3/24/2016
