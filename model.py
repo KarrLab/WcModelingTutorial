@@ -238,7 +238,7 @@ class Submodel:
         return volumes
             
     #runs simulation
-    def simulate(self):
+    def simulate(self, timeStep = 1):
         pass
         
     #calculate reaction rates
@@ -433,7 +433,7 @@ class SsaSubmodel(Submodel):
     def setupSimulation(self):
         Submodel.setupSimulation(self)
         
-    def simulate(self, timeStep):
+    def simulate(self, timeStep = 1):
         self.speciesCounts = self.stochasticSimulationAlgorithm(self.speciesCounts, self.getSpeciesVolumes(), self.reactions, self.volume, timeStep)   
         
     @staticmethod
