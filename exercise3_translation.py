@@ -31,7 +31,7 @@ def simulate(model):
     cellCycleLength = model.getComponentById('cellCycleLength').value
     rnaHalfLife = model.getComponentById('rnaHalfLife').value
     
-    #adjust translation Vmaxes
+    #adjust translation Vmaxes #TODO: remove this
     for reaction in submodel.reactions:
         reaction.vmax *= 0.59
     
