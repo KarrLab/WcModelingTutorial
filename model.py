@@ -224,7 +224,7 @@ class Submodel:
         volumes = self.getSpeciesVolumes()
         concs = {}
         for species in self.species:
-            concs[species.id] = self.speciesCounts[species.id] / volumes[species.index] / N_AVOGADRO
+            concs[species.id] = self.speciesCounts[species.id] / volumes[species.id] / N_AVOGADRO
         return concs
         
     #get container volumes for each species
@@ -232,9 +232,9 @@ class Submodel:
         volumes = {}
         for species in self.species:
             if species.compartment.id == 'c':
-                volumes[species.index] = self.volume
+                volumes[species.id] = self.volume
             else:
-                volumes[species.index] = self.extracellularVolume
+                volumes[species.id] = self.extracellularVolume
         return volumes
             
     #runs simulation
@@ -374,7 +374,7 @@ class FbaSubmodel(Submodel):
                 
     def simulate(self, timeStep = 1):
         fluxes = self.calcFluxes(timeStep)
-        self.updateMetabolites(fluxes)
+        self.updateMetabolites(fluxes, timeStep)
         
     def calcFluxes(self, timeStep = 1):
         '''calc and set bounds'''
@@ -388,38 +388,35 @@ class FbaSubmodel(Submodel):
         
         return self.cobraModel.solution.x
         
-    def updateMetabolites(self, fluxes):
+    def updateMetabolites(self, fluxes, timeStep = 1):
         growth = fluxes[self.biomassProductionReaction['index']] #fraction cell/s
         
         #biomass production
         for part in self.biomassProductionReaction['reaction'].participants:
-            self.speciesCounts[part.id] -= growth * part.coefficient
+            self.speciesCounts[part.id] -= growth * part.coefficient * timeStep
         
         #external nutrients
         for exSpecies in self.exchangedSpecies:
-            self.speciesCounts[exSpecies.id] += fluxes[exSpecies.reactionIndex]
+            self.speciesCounts[exSpecies.id] += fluxes[exSpecies.reactionIndex] * timeStep
         
     def calcBounds(self,  timeStep = 1):
-        cobraModel = self.cobraModel
-        arMdl = cobraModel.to_array_based_model()
-        
         #thermodynamics
-        lowerBounds = self.thermodynamicBounds['lower']
-        upperBounds = self.thermodynamicBounds['upper']
+        lowerBounds = self.thermodynamicBounds['lower'].copy()
+        upperBounds = self.thermodynamicBounds['upper'].copy()
         
         #rate laws
         upperBounds[0:len(self.reactions)] = util.nanminimum(
             upperBounds[0:len(self.reactions)], 
             self.calcReactionRates(self.reactions, self.getSpeciesConcentrations()) * self.volume * N_AVOGADRO,
-            ) * timeStep
+            )
         
         #external nutrients availability
         for exSpecies in self.exchangedSpecies:
-            upperBounds[exSpecies.reactionIndex] = max(0, np.minimum(upperBounds[exSpecies.reactionIndex], self.speciesCounts[exSpecies.id]))
+            upperBounds[exSpecies.reactionIndex] = max(0, np.minimum(upperBounds[exSpecies.reactionIndex], self.speciesCounts[exSpecies.id]) / timeStep)
         
         #exchange bounds
-        lowerBounds = util.nanminimum(lowerBounds, self.dryWeight / 3600 * N_AVOGADRO * 1e-3 * self.exchangeRateBounds['lower']) * timeStep
-        upperBOunds = util.nanminimum(upperBounds, self.dryWeight / 3600 * N_AVOGADRO * 1e-3 * self.exchangeRateBounds['upper']) * timeStep
+        lowerBounds = util.nanminimum(lowerBounds, self.dryWeight / 3600 * N_AVOGADRO * 1e-3 * self.exchangeRateBounds['lower'])
+        upperBounds = util.nanminimum(upperBounds, self.dryWeight / 3600 * N_AVOGADRO * 1e-3 * self.exchangeRateBounds['upper'])
         
         #return
         return {'lower': lowerBounds, 'upper': upperBounds}
@@ -434,7 +431,7 @@ class SsaSubmodel(Submodel):
         Submodel.setupSimulation(self)
         
     def simulate(self, timeStep = 1):
-        self.speciesCounts = self.stochasticSimulationAlgorithm(self.speciesCounts, self.getSpeciesVolumes(), self.reactions, self.volume, timeStep)   
+        self.speciesCounts = self.stochasticSimulationAlgorithm(self.speciesCounts, self.getSpeciesVolumes(), self.reactions, self.volume, timeStep)
         
     @staticmethod
     def stochasticSimulationAlgorithm(speciesCounts, speciesVolumes, reactions, volume, timeMax):
