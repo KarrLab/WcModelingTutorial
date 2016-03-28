@@ -1,7 +1,7 @@
 #!/usr/bin/python
 
 '''
-Simulates metabolism and translation submodels
+Simulates full model
 
 @author Jonathan Karr, karr@mssm.edu
 @date 3/24/2016
@@ -39,11 +39,7 @@ def simulate(model):
 
     #get parameters
     cellCycleLength = model.getComponentById('cellCycleLength').value
-    
-    #adjust translation Vmaxes #TODO: remove this
-    for reaction in model.getComponentById('Translation').reactions:
-        reaction.vmax *= 1
-    
+
     #seed random number generator to generate reproducible results
     random.seed(RANDOM_SEED)
 
