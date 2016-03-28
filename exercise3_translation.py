@@ -116,8 +116,6 @@ def simulate(model):
         extracellularVolumeHist[iTime] = model.extracellularVolume
         speciesCountsHist[:, :, iTime] = model.speciesCounts
         
-    print model.getTotalProteinCount()
-    
     return (timeHist, volumeHist, extracellularVolumeHist, speciesCountsHist)
     
 #plot results
