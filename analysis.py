@@ -6,6 +6,7 @@ Analysis utility functions
 '''
 
 #required libraries
+%matplotlib inline
 from matplotlib.backends.backend_pdf import PdfPages
 from model import Model, Submodel
 from util import N_AVOGADRO
