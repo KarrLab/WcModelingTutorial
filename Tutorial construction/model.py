@@ -380,10 +380,7 @@ class FbaSubmodel(Submodel):
                         
     def calcReactionFluxes(self, timeStep = 1):
         '''calc and set bounds'''
-        bounds = self.calcReactionBounds(timeStep)
-        arrCbModel = self.cobraModel.to_array_based_model()
-        arrCbModel.lower_bounds = bounds['lower']
-        arrCbModel.upper_bounds = bounds['upper']
+        self.calcReactionBounds(timeStep)        
         
         '''calculate growth rate'''
         self.cobraModel.optimize()
@@ -420,7 +417,9 @@ class FbaSubmodel(Submodel):
         upperBounds = util.nanminimum(upperBounds, self.dryWeight / 3600 * N_AVOGADRO * 1e-3 * self.exchangeRateBounds['upper'])
         
         #return
-        return {'lower': lowerBounds, 'upper': upperBounds}
+        arrCbModel = self.cobraModel.to_array_based_model()
+        arrCbModel.lower_bounds = lowerBounds
+        arrCbModel.upper_bounds = upperBounds
         
 #Represents an SSA submodel
 class SsaSubmodel(Submodel):
