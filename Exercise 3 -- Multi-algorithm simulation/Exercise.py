@@ -1,36 +1,40 @@
 #!/usr/bin/python
 
 '''
-Simulates transcription and RNA degradation submodels
+Simulates metabolism submodel
 
 @author Jonathan Karr, karr@mssm.edu
 @date 3/24/2016
 '''
 
 #required libraries
-from model import getModelFromExcel, SsaSubmodel #code for model in exercises
+from model import getModelFromExcel, Submodel, SsaSubmodel #code for model in exercises
 from numpy import random
+from util import N_AVOGADRO
 import analysis #code to analyze simulation results in exercises
 import numpy as np
 import os
-import util
 
 #simulation parameters
-MODEL_FILENAME = 'data/Model.xlsx'
+MODEL_FILENAME = 'Model.xlsx'
 TIME_STEP = 10 #time step on simulation (s)
 TIME_STEP_RECORD = TIME_STEP #Frequency at which to observe predicted cell state (s)
-OUTPUT_DIRECTORY = 'out/exercise2_rna_synthesis_and_degradation'
-RANDOM_SEED = 0
+OUTPUT_DIRECTORY = '.'
+RANDOM_SEED = 10000000
 
 #simulates model
-def simulate(model):    
-    #Get transcription, RNA degradation submodels
-    transcriptionSubmodel = model.getComponentById('Transcription')
-    rnaDegradationSubmodel = model.getComponentById('RnaDegradation')
+def simulate(model):
+    #Get FBA, SSA submodels
+    ssaSubmodels = []
+    for submodel in model.submodels:
+        if isinstance(submodel, SsaSubmodel):
+            ssaSubmodels.append(submodel)
+            
+    metabolismSubmodel = model.getComponentById('Metabolism')
 
     #get parameters
     cellCycleLength = model.getComponentById('cellCycleLength').value
-    
+
     #seed random number generator to generate reproducible results
     random.seed(RANDOM_SEED)
 
@@ -38,24 +42,6 @@ def simulate(model):
     model.calcInitialConditions()
 
     time = 0 #(s)
-    volume = model.volume
-    extracellularVolume = model.extracellularVolume
-    speciesCounts = model.speciesCounts
-
-    #get data to mock other submodels
-    metabolismSubmodel = model.getComponentById('Metabolism')   
-    netMetabolismReaction = np.zeros((len(model.species), len(model.compartments)))
-    for part in metabolismSubmodel.getComponentById('BiomassProduction').participants:
-        netMetabolismReaction[part.species.index, part.compartment.index] = -part.coefficient
-            
-    translationSubmodel = model.getComponentById('Translation')   
-    netTranslationReaction = np.zeros((len(model.species), len(model.compartments)))
-    for rxn in translationSubmodel.reactions:
-        for part in rxn.participants:
-            if part.species.type == 'Protein':
-                initCopyNumber = model.speciesCounts[part.species.index, part.compartment.index]
-        for part in rxn.participants:
-            netTranslationReaction[part.species.index, part.compartment.index] += part.coefficient * initCopyNumber
 
     #Initialize history
     timeMax = cellCycleLength #(s)
@@ -64,33 +50,55 @@ def simulate(model):
     timeHist = np.linspace(0, timeMax, num = nTimeStepsRecord)
 
     volumeHist = np.full(nTimeStepsRecord, np.nan)
-    volumeHist[0] = volume
+    volumeHist[0] = model.volume
 
-    extracellularVolumeHist = np.full(nTimeStepsRecord, np.nan)
-    extracellularVolumeHist[0] = extracellularVolume
+    growthHist = np.full(nTimeStepsRecord, np.nan)
+    growthHist[0] = np.log(2) / cellCycleLength
 
     speciesCountsHist = np.zeros((len(model.species), len(model.compartments), nTimeStepsRecord))
-    speciesCountsHist[:, :, 0] = speciesCounts
+    speciesCountsHist[:, :, 0] = model.speciesCounts
             
     #Simulate dynamics
     print 'Simulating for %d time steps from 0-%d s' % (nTimeSteps, timeMax)
     for iTime in range(1, nTimeSteps):
         time = iTime * TIME_STEP
         if iTime % 100 == 1:
-            print '\tStep = %d, t=%.1f s' % (iTime, time)
+            print '\tStep = %d, t = %.1f s' % (iTime, time)
         
         #simulate submodels
-        model.setSpeciesCountsDict(SsaSubmodel.stochasticSimulationAlgorithm(
-            model.getSpeciesCountsDict(), 
-            model.getSpeciesVolumesDict(), 
-            [transcriptionSubmodel.reactions, rnaDegradationSubmodel.reactions], 
-            model.volume,
-            TIME_STEP,
-            ))
+        #<Synchronize metabolism submodel: submodel.updateLocalCellState(model)>
+        #<Calculate reaction bounds: submodel.calcReactionBounds(TIME_STEP)>
+        #<Optimize FBA: submodel.calcReactionFluxes(TIME_STEP)>
+        #<Update metabolites: submodel.updateMetabolites(TIME_STEP)>
+        #<Synchronize metabolism submodel: submodel.updateGlobalCellState(model)>
+
+        speciesCountsDict = model.getSpeciesCountsDict()        
+        time2 = 0
+        while time2 < TIME_STEP:
+            time = 0
+            
+            #calculate concentrations
+            #<convert species counts to concentrations>
         
-        #mock other submodels
-        model.speciesCounts += netMetabolismReaction  * np.log(2) / cellCycleLength * np.exp(np.log(2) * time / cellCycleLength) * TIME_STEP
-        model.speciesCounts += netTranslationReaction * np.log(2) / cellCycleLength * np.exp(np.log(2) * time / cellCycleLength) * TIME_STEP
+            #calculate propensities
+            #<iterate over SSA submodels and calculate reaction rates: Submodel.calcReactionRates(submodel.reactions, specicesConcentrations)>
+            
+            #Select time to next reaction from exponential distribution
+            #<dt = random.exponential(...)>
+            
+            #Select next reaction
+            #<iSubmodel = random.choice(...)>
+            #<iRxn = random.choice(...)>
+
+            #update time
+            #<time2 += dt>
+            
+            #execute reaction
+            #<selectedSubmodel = ...>
+            #<selectedReaction = ...>
+            #<selectedSubmodel.executeReaction(selectedReaction)>
+
+        model.setSpeciesCountsDict(speciesCountsDict)
         
         #update mass, volume        
         model.calcMass()
@@ -98,13 +106,13 @@ def simulate(model):
                 
         #Record state
         volumeHist[iTime] = model.volume
-        extracellularVolumeHist[iTime] = model.extracellularVolume
+        growthHist[iTime] = model.growth
         speciesCountsHist[:, :, iTime] = model.speciesCounts
-    
-    return (timeHist, volumeHist, extracellularVolumeHist, speciesCountsHist)
+
+    return (timeHist, volumeHist, growthHist, speciesCountsHist)
     
 #plot results
-def analyzeResults(model, time, volume, extracellularVolume, speciesCounts):
+def analyzeResults(model, time, volume, growth, speciesCounts):
     if not os.path.exists(OUTPUT_DIRECTORY):
         os.makedirs(OUTPUT_DIRECTORY)
         
@@ -117,6 +125,20 @@ def analyzeResults(model, time, volume, extracellularVolume, speciesCounts):
             totalRna += speciesCounts[species.index, cellComp.index, :]
         elif species.type == 'Protein':
             totalProt += speciesCounts[species.index, cellComp.index, :]
+	
+    analysis.plot(
+        model = model, 
+        time = time, 
+        yDatas = {'Volume': volume},
+        fileName = os.path.join(OUTPUT_DIRECTORY, 'Volume.pdf')
+        )
+        
+    analysis.plot(
+        model = model, 
+        time = time, 
+        yDatas = {'Growth': growth},
+        fileName = os.path.join(OUTPUT_DIRECTORY, 'Growth.pdf')
+        )
             
     analysis.plot(
         model = model, 
@@ -151,14 +173,15 @@ def analyzeResults(model, time, volume, extracellularVolume, speciesCounts):
         units = 'uM',
         fileName = os.path.join(OUTPUT_DIRECTORY, 'NMPs.pdf')
         )
-    
+        
     analysis.plot(
         model = model, 
         time = time, 
+        volume = volume,
         speciesCounts = speciesCounts, 
-        units = 'molecules',
-        selectedSpeciesCompartments = ['RnaPolymerase-Rna[c]', 'Adk-Rna[c]', 'Apt-Rna[c]', 'Cmk-Rna[c]'], 
-        fileName = os.path.join(OUTPUT_DIRECTORY, 'RNA.pdf')
+        selectedSpeciesCompartments = ['ALA[c]', 'ARG[c]', 'ASN[c]', 'ASP[c]'], 
+        units = 'uM',
+        fileName = os.path.join(OUTPUT_DIRECTORY, 'Amino acids.pdf')
         )
         
     analysis.plot(
@@ -173,5 +196,10 @@ def analyzeResults(model, time, volume, extracellularVolume, speciesCounts):
 #main function
 if __name__ == "__main__":
     model = getModelFromExcel(MODEL_FILENAME)
-    time, volume, extracellularVolume, speciesCounts = simulate(model)
-    analyzeResults(model, time, volume, extracellularVolume, speciesCounts)
+    time, volume, growth, speciesCounts = simulate(model)
+    analyzeResults(model, time, volume, growth, speciesCounts)
+    
+    #Check if simulation implemented correctly
+    volumeChange = (volume[-1] - volume[0]) / volume[0]
+    if volumeChange < 0.9 or volumeChange > 1.1:
+        raise Exception('Volume should approximately double over the simulation.')

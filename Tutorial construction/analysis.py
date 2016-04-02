@@ -13,6 +13,8 @@ from matplotlib import pyplot, ticker
 import numpy as np
 import re
 
+#%matplotlib inline
+
 def plot(model, time = np.zeros(0), 
     speciesCounts = None, volume = np.zeros(0), extracellularVolume = np.zeros(0),
     selectedSpeciesCompartments = [], 

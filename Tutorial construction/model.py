@@ -36,6 +36,7 @@ class Model:
     dryWeight = None #cell dry weight
     volume = None #cell volume
     extracellularVolume = None #media volume
+    growth = None
     
     def __init__(self, submodels = [], compartments = [], species = [], reactions = [], parameters = [], references = []):
         self.submodels = submodels
@@ -72,6 +73,9 @@ class Model:
          
         #density
         self.density = self.mass / self.volume
+        
+        #growth
+        self.growth = np.nan
         
         #sync submodels
         for subModel in self.submodels:
@@ -236,10 +240,6 @@ class Submodel:
             else:
                 volumes[species.id] = self.extracellularVolume
         return volumes
-            
-    #runs simulation
-    def simulate(self, timeStep = 1):
-        pass
         
     #calculate reaction rates
     @staticmethod
@@ -267,7 +267,7 @@ class Submodel:
         
 #Represents an FBA submodel
 class FbaSubmodel(Submodel):
-    biomassProductionReaction = None 
+    metabolismProductionReaction = None 
     exchangedSpecies = None
     
     cobraModel = None
@@ -276,7 +276,9 @@ class FbaSubmodel(Submodel):
     
     defaultFbaBound = 1e15
     
-    dryWeight = None
+    dryWeight = np.nan
+    reactionFluxes = np.zeros(0)
+    growth = np.nan
     
     def __init__(self, *args, **kwargs):        
         Submodel.__init__(self, *args, **kwargs)
@@ -303,7 +305,7 @@ class FbaSubmodel(Submodel):
                 name = rxn.name,
                 lower_bound = -self.defaultFbaBound if rxn.reversible else 0,
                 upper_bound =  self.defaultFbaBound,
-                objective_coefficient = 1 if rxn.id == 'BiomassProduction' else 0,
+                objective_coefficient = 1 if rxn.id == 'MetabolismProduction' else 0,
                 )
             cobraModel.add_reaction(cbRxn)
 
@@ -363,43 +365,36 @@ class FbaSubmodel(Submodel):
                 self.exchangeRateBounds['upper'][exSpecies.reactionIndex] =  nonCarbonExRate
             
         '''Setup reactions'''
-        self.biomassProductionReaction = {
-            'index': cobraModel.reactions.index(cobraModel.reactions.get_by_id('BiomassProduction')),
-            'reaction': self.getComponentById('BiomassProduction', self.reactions),
+        self.metabolismProductionReaction = {
+            'index': cobraModel.reactions.index(cobraModel.reactions.get_by_id('MetabolismProduction')),
+            'reaction': self.getComponentById('MetabolismProduction', self.reactions),
             }
             
     def updateLocalCellState(self, model):
         Submodel.updateLocalCellState(self, model)
         self.dryWeight = model.dryWeight
-                
-    def simulate(self, timeStep = 1):
-        fluxes = self.calcFluxes(timeStep)
-        self.updateMetabolites(fluxes, timeStep)
         
-    def calcFluxes(self, timeStep = 1):
-        '''calc and set bounds'''
-        bounds = self.calcBounds(timeStep)
-        arrCbModel = self.cobraModel.to_array_based_model()
-        arrCbModel.lower_bounds = bounds['lower']
-        arrCbModel.upper_bounds = bounds['upper']
-        
+    def updateGlobalCellState(self, model):
+        Submodel.updateGlobalCellState(self, model)
+        model.growth = self.growth
+                        
+    def calcReactionFluxes(self, timeStep = 1):
         '''calculate growth rate'''
         self.cobraModel.optimize()
         
-        return self.cobraModel.solution.x
+        self.reactionFluxes = self.cobraModel.solution.x
+        self.growth = self.reactionFluxes[self.metabolismProductionReaction['index']] #fraction cell/s
         
-    def updateMetabolites(self, fluxes, timeStep = 1):
-        growth = fluxes[self.biomassProductionReaction['index']] #fraction cell/s
-        
+    def updateMetabolites(self, timeStep = 1):
         #biomass production
-        for part in self.biomassProductionReaction['reaction'].participants:
-            self.speciesCounts[part.id] -= growth * part.coefficient * timeStep
+        for part in self.metabolismProductionReaction['reaction'].participants:
+            self.speciesCounts[part.id] -= self.growth * part.coefficient * timeStep
         
         #external nutrients
         for exSpecies in self.exchangedSpecies:
-            self.speciesCounts[exSpecies.id] += fluxes[exSpecies.reactionIndex] * timeStep
+            self.speciesCounts[exSpecies.id] += self.reactionFluxes[exSpecies.reactionIndex] * timeStep
         
-    def calcBounds(self,  timeStep = 1):
+    def calcReactionBounds(self,  timeStep = 1):
         #thermodynamics
         lowerBounds = self.thermodynamicBounds['lower'].copy()
         upperBounds = self.thermodynamicBounds['upper'].copy()
@@ -419,7 +414,9 @@ class FbaSubmodel(Submodel):
         upperBounds = util.nanminimum(upperBounds, self.dryWeight / 3600 * N_AVOGADRO * 1e-3 * self.exchangeRateBounds['upper'])
         
         #return
-        return {'lower': lowerBounds, 'upper': upperBounds}
+        arrCbModel = self.cobraModel.to_array_based_model()
+        arrCbModel.lower_bounds = lowerBounds
+        arrCbModel.upper_bounds = upperBounds
         
 #Represents an SSA submodel
 class SsaSubmodel(Submodel):
@@ -429,10 +426,7 @@ class SsaSubmodel(Submodel):
         
     def setupSimulation(self):
         Submodel.setupSimulation(self)
-        
-    def simulate(self, timeStep = 1):
-        self.speciesCounts = self.stochasticSimulationAlgorithm(self.speciesCounts, self.getSpeciesVolumes(), self.reactions, self.volume, timeStep)
-        
+            
     @staticmethod
     def stochasticSimulationAlgorithm(speciesCounts, speciesVolumes, reactions, volume, timeMax):
         if len(reactions) >= 1 and not isinstance(reactions[0], list):
@@ -497,13 +491,12 @@ class Species:
     molecularWeight = None
     charge = None
     type = ''
-    subtype = ''
     concentrations = []
     crossRefs = []
     comments = ''
     
     def __init__(self, id = '', name = '', structure = '', empiricalFormula = '', molecularWeight = None, 
-        charge = None, type = '', subtype = '', concentrations = [], crossRefs = [], comments = ''):
+        charge = None, type = '', concentrations = [], crossRefs = [], comments = ''):
         
         self.id = id    
         self.name = name
@@ -512,7 +505,6 @@ class Species:
         self.molecularWeight = molecularWeight
         self.charge = charge
         self.type = type
-        self.subtype = subtype
         self.concentrations = concentrations
         self.crossRefs = crossRefs
         
@@ -776,18 +768,17 @@ def getModelFromExcel(filename):
             molecularWeight = mw,
             charge = charge,
             type = ws.cell(row = iRow, column = 7).value,
-            subtype = ws.cell(row = iRow, column = 8).value, 
             concentrations = [
-                Concentration(compartment = 'c', value = float(ws.cell(row = iRow, column = 9).value or 0)),
-                Concentration(compartment = 'e', value = float(ws.cell(row = iRow, column = 10).value or 0)),
+                Concentration(compartment = 'c', value = float(ws.cell(row = iRow, column = 8).value or 0)),
+                Concentration(compartment = 'e', value = float(ws.cell(row = iRow, column = 9).value or 0)),
                 ],
             crossRefs = [
                 CrossReference(
-                    source = ws.cell(row = iRow, column = 13).value, 
-                    id = ws.cell(row = iRow, column = 14).value,
+                    source = ws.cell(row = iRow, column = 10).value, 
+                    id = ws.cell(row = iRow, column = 11).value,
                     ),
                 ],
-            comments = ws.cell(row = iRow, column = 15).value,
+            comments = ws.cell(row = iRow, column = 12).value,
             ))
             
     #reactions

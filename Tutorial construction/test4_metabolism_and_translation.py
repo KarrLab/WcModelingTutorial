@@ -1,7 +1,7 @@
 #!/usr/bin/python
 
 '''
-Simulates full model
+Simulates metabolism and translation submodels
 
 @author Jonathan Karr, karr@mssm.edu
 @date 3/24/2016
@@ -19,40 +19,53 @@ import util
 MODEL_FILENAME = 'data/Model.xlsx'
 TIME_STEP = 10 #time step on simulation (s)
 TIME_STEP_RECORD = TIME_STEP #Frequency at which to observe predicted cell state (s)
-OUTPUT_DIRECTORY = 'out/exercise5_full_model'
-RANDOM_SEED = 10000000
+OUTPUT_DIRECTORY = 'out/test4_metabolism_and_translation'
+RANDOM_SEED = 0
 
 #simulates model
 def simulate(model):
-    #Get FBA, SSA submodels
-    ssaSubmodels = []
-    nonSsaSubmodels = []
-    ssaReactions = []
-    for submodel in model.submodels:
-        if isinstance(submodel, SsaSubmodel):
-            ssaSubmodels.append(submodel)
-            ssaReactions.append(submodel.reactions)
-        else:
-            nonSsaSubmodels.append(submodel)
-            
+    #Get metabolism and translation submodels
     metabolismSubmodel = model.getComponentById('Metabolism')
+    translationSubmodel = model.getComponentById('Translation')
 
     #get parameters
     cellCycleLength = model.getComponentById('cellCycleLength').value
-
+    rnaHalfLife = model.getComponentById('rnaHalfLife').value
+    
+    #adjust translation Vmaxes #TODO: remove this
+    for reaction in translationSubmodel.reactions:
+        reaction.vmax *= 0.59
+    
     #seed random number generator to generate reproducible results
     random.seed(RANDOM_SEED)
 
     #Initialize state
-    model.calcInitialConditions()
-    for submodel in model.submodels:
-        submodel.simulate()
     model.calcInitialConditions()
 
     time = 0 #(s)
     volume = model.volume
     extracellularVolume = model.extracellularVolume
     speciesCounts = model.speciesCounts
+
+    #get data to mock other submodels
+    transcriptionSubmodel = model.getComponentById('Transcription')   
+    netTranscriptionReaction = np.zeros((len(model.species), len(model.compartments)))
+    for rxn in transcriptionSubmodel.reactions:
+        for part in rxn.participants:
+            if part.species.type == 'RNA':
+                initCopyNumber = model.speciesCounts[part.species.index, part.compartment.index]
+        for part in rxn.participants:
+            netTranscriptionReaction[part.species.index, part.compartment.index] += part.coefficient * initCopyNumber * (1 + cellCycleLength / rnaHalfLife)
+    
+    rnaDegradationSubmodel = model.getComponentById('RnaDegradation')   
+    netRnaDegradationReaction = np.zeros((len(model.species), len(model.compartments)))
+    for rxn in rnaDegradationSubmodel.reactions:
+        for part in rxn.participants:
+            if part.species.type == 'RNA':
+                initCopyNumber = model.speciesCounts[part.species.index, part.compartment.index]
+        for part in rxn.participants:
+            netRnaDegradationReaction[part.species.index, part.compartment.index] += \
+                part.coefficient * initCopyNumber * cellCycleLength / rnaHalfLife
 
     #Initialize history
     timeMax = cellCycleLength #(s)
@@ -67,7 +80,7 @@ def simulate(model):
     extracellularVolumeHist[0] = extracellularVolume
 
     growthHist = np.full(nTimeStepsRecord, np.nan)
-    growthHist[0] = metabolismSubmodel.cobraModel.solution.x[metabolismSubmodel.biomassProductionReaction['index']]
+    growthHist[0] = model.growth
 
     speciesCountsHist = np.zeros((len(model.species), len(model.compartments), nTimeStepsRecord))
     speciesCountsHist[:, :, 0] = speciesCounts
@@ -80,18 +93,22 @@ def simulate(model):
             print '\tStep = %d, t=%.1f s' % (iTime, time)
         
         #simulate submodels
-        for nonSsaSubmodel in nonSsaSubmodels:
-            nonSsaSubmodel.updateLocalCellState(model)
-            nonSsaSubmodel.simulate(TIME_STEP)
-            nonSsaSubmodel.updateGlobalCellState(model)        
+        metabolismSubmodel.updateLocalCellState(model)
+        metabolismSubmodel.calcReactionFluxes(TIME_STEP)
+        metabolismSubmodel.updateMetabolites(TIME_STEP)
+        metabolismSubmodel.updateGlobalCellState(model)        
 
         model.setSpeciesCountsDict(SsaSubmodel.stochasticSimulationAlgorithm(
             model.getSpeciesCountsDict(), 
             model.getSpeciesVolumesDict(), 
-            ssaReactions,
+            translationSubmodel.reactions,
             model.volume,
             TIME_STEP,
             ))
+        
+        #mock other submodels
+        model.speciesCounts += netTranscriptionReaction  * np.log(2) / cellCycleLength * np.exp(np.log(2) * time / cellCycleLength) * TIME_STEP
+        model.speciesCounts += netRnaDegradationReaction * np.log(2) / cellCycleLength * np.exp(np.log(2) * time / cellCycleLength) * TIME_STEP
         
         #update mass, volume        
         model.calcMass()
@@ -100,9 +117,9 @@ def simulate(model):
         #Record state
         volumeHist[iTime] = model.volume
         extracellularVolumeHist[iTime] = model.extracellularVolume
-        growthHist[iTime] = metabolismSubmodel.cobraModel.solution.x[metabolismSubmodel.biomassProductionReaction['index']]
+        growthHist[iTime] = model.growth
         speciesCountsHist[:, :, iTime] = model.speciesCounts
-
+    
     return (timeHist, volumeHist, extracellularVolumeHist, speciesCountsHist)
     
 #plot results

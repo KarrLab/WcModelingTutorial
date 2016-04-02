@@ -139,14 +139,11 @@ def run(protLen = 100, startCodon = 'ATG', stopCodon = 'TAG'):
     specWs['E1'] = 'Molecular weight'
     specWs['F1'] = 'Charge'
     specWs['G1'] = 'Type'
-    specWs['H1'] = 'Subtype'
-    specWs['I1'] = 'Average concentration, cytosol (M)'
-    specWs['J1'] = 'Average concentration, extracellular space (M)'
-    specWs['K1'] = 'Average count, cytosol'
-    specWs['L1'] = 'Average count, extracellular space'
-    specWs['M1'] = 'Cross reference source'
-    specWs['N1'] = 'Cross reference ID'
-    specWs['O1'] = 'Comments'
+    specWs['H1'] = 'Average concentration, cytosol (M)'
+    specWs['I1'] = 'Average concentration, extracellular space (M)'
+    specWs['J1'] = 'Cross reference source'
+    specWs['K1'] = 'Cross reference ID'
+    specWs['L1'] = 'Comments'
     
     rxnWs['A1'] = 'ID'
     rxnWs['B1'] = 'Name'
@@ -178,14 +175,11 @@ def run(protLen = 100, startCodon = 'ATG', stopCodon = 'TAG'):
         specWs['E%d' % (iGene + 2)] = mw #molecular weight
         specWs['F%d' % (iGene + 2)] = charge #charge
         specWs['G%d' % (iGene + 2)] = 'RNA' #type
-        specWs['H%d' % (iGene + 2)] = '' #subtype
-        specWs['I%d' % (iGene + 2)] =  nRnaCopy / cellVol / N_AVOGADRO #cytosol concentration
-        specWs['J%d' % (iGene + 2)] =  0 #extracellular concentration
-        specWs['K%d' % (iGene + 2)] =  nRnaCopy #cytosol count
-        specWs['L%d' % (iGene + 2)] =  0 #extracellular count
-        specWs['M%d' % (iGene + 2)] = '' #Cross reference source
-        specWs['N%d' % (iGene + 2)] = '' #Cross reference ID
-        specWs['O%d' % (iGene + 2)] = '' #Comments
+        specWs['H%d' % (iGene + 2)] =  nRnaCopy / cellVol / N_AVOGADRO #cytosol concentration
+        specWs['I%d' % (iGene + 2)] =  0 #extracellular concentration
+        specWs['J%d' % (iGene + 2)] = '' #Cross reference source
+        specWs['K%d' % (iGene + 2)] = '' #Cross reference ID
+        specWs['L%d' % (iGene + 2)] = '' #Comments
         
         #protein species
         mw = 0
@@ -204,14 +198,11 @@ def run(protLen = 100, startCodon = 'ATG', stopCodon = 'TAG'):
         specWs['E%d' % (iGene + 2 + nGene)] = mw #molecular weight
         specWs['F%d' % (iGene + 2 + nGene)] = charge #charge
         specWs['G%d' % (iGene + 2 + nGene)] = 'Protein' #type
-        specWs['H%d' % (iGene + 2 + nGene)] = '' #subtype
-        specWs['I%d' % (iGene + 2 + nGene)] =  nProtCopy / cellVol / N_AVOGADRO #cytosol concentration
-        specWs['J%d' % (iGene + 2 + nGene)] =  0 #extracellular concentration
-        specWs['K%d' % (iGene + 2 + nGene)] =  nProtCopy #cytosol count
-        specWs['L%d' % (iGene + 2 + nGene)] =  0 #extracellular count
-        specWs['M%d' % (iGene + 2 + nGene)] = '' #Cross reference source
-        specWs['N%d' % (iGene + 2 + nGene)] = '' #Cross reference ID
-        specWs['O%d' % (iGene + 2 + nGene)] = '' #Comments
+        specWs['H%d' % (iGene + 2 + nGene)] =  nProtCopy / cellVol / N_AVOGADRO #cytosol concentration
+        specWs['I%d' % (iGene + 2 + nGene)] =  0 #extracellular concentration
+        specWs['J%d' % (iGene + 2 + nGene)] = '' #Cross reference source
+        specWs['K%d' % (iGene + 2 + nGene)] = '' #Cross reference ID
+        specWs['L%d' % (iGene + 2 + nGene)] = '' #Comments
         
         #transcription reaction
         nA = rnaSeqs[iGene].seq.count('A')
@@ -354,8 +345,8 @@ def run(protLen = 100, startCodon = 'ATG', stopCodon = 'TAG'):
     
     stoichiometry = '[c]: %s ==> %s' % (' + '.join(lhs), ' + '.join(rhs))
         
-    rxnWs['A%d' % (nGene * 3 + 2)] = 'BiomassProduction' #id
-    rxnWs['B%d' % (nGene * 3 + 2)] = 'Biomass production' #id
+    rxnWs['A%d' % (nGene * 3 + 2)] = 'MetabolismProduction' #id
+    rxnWs['B%d' % (nGene * 3 + 2)] = 'Metabolism production' #id
     rxnWs['C%d' % (nGene * 3 + 2)] = 'Metabolism' #id
     rxnWs['D%d' % (nGene * 3 + 2)] = stoichiometry #stoichiometry
     rxnWs['E%d' % (nGene * 3 + 2)] = '' #enzyme
