@@ -1,7 +1,7 @@
 #!/usr/bin/python
 
 '''
-Simulates metabolism and translation submodels
+Simulates transcription and RNA degradation submodels
 
 @author Jonathan Karr, karr@mssm.edu
 @date 3/24/2016
@@ -19,22 +19,17 @@ import util
 MODEL_FILENAME = 'data/Model.xlsx'
 TIME_STEP = 10 #time step on simulation (s)
 TIME_STEP_RECORD = TIME_STEP #Frequency at which to observe predicted cell state (s)
-OUTPUT_DIRECTORY = 'out/exercise4_metabolism_and_translation'
+OUTPUT_DIRECTORY = 'out/test2_rna_synthesis_and_degradation'
 RANDOM_SEED = 0
 
 #simulates model
-def simulate(model):
-    #Get metabolism and translation submodels
-    metabolismSubmodel = model.getComponentById('Metabolism')
-    translationSubmodel = model.getComponentById('Translation')
+def simulate(model):    
+    #Get transcription, RNA degradation submodels
+    transcriptionSubmodel = model.getComponentById('Transcription')
+    rnaDegradationSubmodel = model.getComponentById('RnaDegradation')
 
     #get parameters
     cellCycleLength = model.getComponentById('cellCycleLength').value
-    rnaHalfLife = model.getComponentById('rnaHalfLife').value
-    
-    #adjust translation Vmaxes #TODO: remove this
-    for reaction in translationSubmodel.reactions:
-        reaction.vmax *= 0.59
     
     #seed random number generator to generate reproducible results
     random.seed(RANDOM_SEED)
@@ -48,24 +43,19 @@ def simulate(model):
     speciesCounts = model.speciesCounts
 
     #get data to mock other submodels
-    transcriptionSubmodel = model.getComponentById('Transcription')   
-    netTranscriptionReaction = np.zeros((len(model.species), len(model.compartments)))
-    for rxn in transcriptionSubmodel.reactions:
+    metabolismSubmodel = model.getComponentById('Metabolism')   
+    netMetabolismReaction = np.zeros((len(model.species), len(model.compartments)))
+    for part in metabolismSubmodel.getComponentById('MetabolismProduction').participants:
+        netMetabolismReaction[part.species.index, part.compartment.index] = -part.coefficient
+            
+    translationSubmodel = model.getComponentById('Translation')   
+    netTranslationReaction = np.zeros((len(model.species), len(model.compartments)))
+    for rxn in translationSubmodel.reactions:
         for part in rxn.participants:
-            if part.species.type == 'RNA':
+            if part.species.type == 'Protein':
                 initCopyNumber = model.speciesCounts[part.species.index, part.compartment.index]
         for part in rxn.participants:
-            netTranscriptionReaction[part.species.index, part.compartment.index] += part.coefficient * initCopyNumber * (1 + cellCycleLength / rnaHalfLife)
-    
-    rnaDegradationSubmodel = model.getComponentById('RnaDegradation')   
-    netRnaDegradationReaction = np.zeros((len(model.species), len(model.compartments)))
-    for rxn in rnaDegradationSubmodel.reactions:
-        for part in rxn.participants:
-            if part.species.type == 'RNA':
-                initCopyNumber = model.speciesCounts[part.species.index, part.compartment.index]
-        for part in rxn.participants:
-            netRnaDegradationReaction[part.species.index, part.compartment.index] += \
-                part.coefficient * initCopyNumber * cellCycleLength / rnaHalfLife
+            netTranslationReaction[part.species.index, part.compartment.index] += part.coefficient * initCopyNumber
 
     #Initialize history
     timeMax = cellCycleLength #(s)
@@ -79,9 +69,6 @@ def simulate(model):
     extracellularVolumeHist = np.full(nTimeStepsRecord, np.nan)
     extracellularVolumeHist[0] = extracellularVolume
 
-    growthHist = np.full(nTimeStepsRecord, np.nan)
-    growthHist[0] = model.growth
-
     speciesCountsHist = np.zeros((len(model.species), len(model.compartments), nTimeStepsRecord))
     speciesCountsHist[:, :, 0] = speciesCounts
             
@@ -93,22 +80,17 @@ def simulate(model):
             print '\tStep = %d, t=%.1f s' % (iTime, time)
         
         #simulate submodels
-        metabolismSubmodel.updateLocalCellState(model)
-        metabolismSubmodel.calcReactionFluxes(TIME_STEP)
-        metabolismSubmodel.updateMetabolites(TIME_STEP)
-        metabolismSubmodel.updateGlobalCellState(model)        
-
         model.setSpeciesCountsDict(SsaSubmodel.stochasticSimulationAlgorithm(
             model.getSpeciesCountsDict(), 
             model.getSpeciesVolumesDict(), 
-            translationSubmodel.reactions,
+            [transcriptionSubmodel.reactions, rnaDegradationSubmodel.reactions], 
             model.volume,
             TIME_STEP,
             ))
         
         #mock other submodels
-        model.speciesCounts += netTranscriptionReaction  * np.log(2) / cellCycleLength * np.exp(np.log(2) * time / cellCycleLength) * TIME_STEP
-        model.speciesCounts += netRnaDegradationReaction * np.log(2) / cellCycleLength * np.exp(np.log(2) * time / cellCycleLength) * TIME_STEP
+        model.speciesCounts += netMetabolismReaction  * np.log(2) / cellCycleLength * np.exp(np.log(2) * time / cellCycleLength) * TIME_STEP
+        model.speciesCounts += netTranslationReaction * np.log(2) / cellCycleLength * np.exp(np.log(2) * time / cellCycleLength) * TIME_STEP
         
         #update mass, volume        
         model.calcMass()
@@ -117,7 +99,6 @@ def simulate(model):
         #Record state
         volumeHist[iTime] = model.volume
         extracellularVolumeHist[iTime] = model.extracellularVolume
-        growthHist[iTime] = model.growth
         speciesCountsHist[:, :, iTime] = model.speciesCounts
     
     return (timeHist, volumeHist, extracellularVolumeHist, speciesCountsHist)
@@ -170,15 +151,14 @@ def analyzeResults(model, time, volume, extracellularVolume, speciesCounts):
         units = 'uM',
         fileName = os.path.join(OUTPUT_DIRECTORY, 'NMPs.pdf')
         )
-        
+    
     analysis.plot(
         model = model, 
         time = time, 
-        volume = volume,
         speciesCounts = speciesCounts, 
-        selectedSpeciesCompartments = ['ALA[c]', 'ARG[c]', 'ASN[c]', 'ASP[c]'], 
-        units = 'uM',
-        fileName = os.path.join(OUTPUT_DIRECTORY, 'Amino acids.pdf')
+        units = 'molecules',
+        selectedSpeciesCompartments = ['RnaPolymerase-Rna[c]', 'Adk-Rna[c]', 'Apt-Rna[c]', 'Cmk-Rna[c]'], 
+        fileName = os.path.join(OUTPUT_DIRECTORY, 'RNA.pdf')
         )
         
     analysis.plot(
