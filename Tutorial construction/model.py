@@ -379,9 +379,6 @@ class FbaSubmodel(Submodel):
         model.growth = self.growth
                         
     def calcReactionFluxes(self, timeStep = 1):
-        '''calc and set bounds'''
-        self.calcReactionBounds(timeStep)        
-        
         '''calculate growth rate'''
         self.cobraModel.optimize()
         

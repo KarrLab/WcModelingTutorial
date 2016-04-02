@@ -94,15 +94,16 @@ def simulate(model):
             print '\tStep = %d, t=%.1f s' % (iTime, time)
         
         #simulate submodel        
+        submodel.calcReactionBounds(TIME_STEP)
         submodel.calcReactionFluxes(TIME_STEP)
         submodel.updateMetabolites(TIME_STEP)
         
         #mock other submodels
         submodel.updateGlobalCellState(model)
 
-        model.speciesCounts += netTranslationReaction    * np.log(2) / cellCycleLength * np.exp(np.log(2) * time / cellCycleLength) * TIME_STEP
-        model.speciesCounts += netTranscriptionReaction  * np.log(2) / cellCycleLength * np.exp(np.log(2) * time / cellCycleLength) * TIME_STEP
-        model.speciesCounts += netRnaDegradationReaction * np.log(2) / cellCycleLength * np.exp(np.log(2) * time / cellCycleLength) * TIME_STEP
+        model.speciesCounts += netTranslationReaction    * submodel.growth * TIME_STEP
+        model.speciesCounts += netTranscriptionReaction  * submodel.growth * TIME_STEP
+        model.speciesCounts += netRnaDegradationReaction * submodel.growth * TIME_STEP
 
         submodel.updateLocalCellState(model)
         
