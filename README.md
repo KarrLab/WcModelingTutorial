@@ -17,12 +17,14 @@ This tutorial is designed to teach students several of the fundamental concepts 
 
 ## Required background
 The following background knowledge is needed to complete this tutorial:
+
 - Flux balance analysis
 - Stochastic simulation algorithm
 - Python programming
 
 ## Required software
 The tutorial requires the following packages:
+
 - biopython
 - cobra
 - libglpk-dev
@@ -46,13 +48,15 @@ git clone https://github.com/KarrLab/WcModelingTutorial.git
 ```
 
 ## Using the tutorial
-We recommmend
+We recommmend:
+
 1. Watch the [introductory lecture](). This introduces WC modeling and provides an overview of the current state of the art. The [slides](https://github.com/KarrLab/WcModelingTutorial/raw/master/1.%20Introduction%20to%20whole-cell%20modeling.pdf) for this video are included in this repository.
 2. Watch the [tutorial introduction video](). This breifly reviews WC modeling and outlines the tutorials. The [slides](https://github.com/KarrLab/WcModelingTutorial/raw/master/3.%20Exercises.pdf) for this video are included in this repository.
 3. Complete the tutorials 1-5. We recommend completing the tutorials in this order because the tutorials build upon each other. The [tutorial introduction slides](https://github.com/KarrLab/WcModelingTutorial/raw/master/3.%20Exercises.pdf) contain instructions for the tutorial and summarize the solutions. All of the materials for the tutorials, as well as their detailed solutions are contained in the directories titled "Exercise X ...".
 
 ## Further information
 Please see these research articles and reviews for more information about WC modeling:
+
 - Carrera J & Covert MW. Why Build Whole-Cell Models?. *Trends Cell Biol* 25, 719–22 (2015). doi: [10.1016/j.tcb.2015.09.004](http://dx.doi.org/10.1016/j.tcb.2015.09.004)
 - Karr JR, Takahasi K & Funahashi A. The principles of whole-cell modeling. *Curr Opin Microbiol* 27, 18&ndash;24 (2015). doi: [10.1016/j.mib.2015.06.004](http://dx.doi.org/10.1016/j.mib.2015.06.004)
 - Karr JR, Sanghvi JC, Macklin DN, Gutschow MV, Jacobs JM, Bolival B Jr, Assad-Garcia N, Glass JI & Covert MW. A whole-cell computational model predicts phenotype from genotype. *Cell* 150, 389&ndash;401 (2012). doi: [10.1016/j.cell.2012.05.044](http://dx.doi.org/10.1016/j.cell.2012.05.044)
