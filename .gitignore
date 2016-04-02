@@ -1,4 +1,4 @@
 *.pyc
-data/*.fasta
-data/Model-RNA and proteins.xlsx
-out
+Tutorial construction/data/*.fasta
+Tutorial construction/data/Model-RNA and proteins.xlsx
+Tutorial construction/out
