@@ -497,13 +497,12 @@ class Species:
     molecularWeight = None
     charge = None
     type = ''
-    subtype = ''
     concentrations = []
     crossRefs = []
     comments = ''
     
     def __init__(self, id = '', name = '', structure = '', empiricalFormula = '', molecularWeight = None, 
-        charge = None, type = '', subtype = '', concentrations = [], crossRefs = [], comments = ''):
+        charge = None, type = '', concentrations = [], crossRefs = [], comments = ''):
         
         self.id = id    
         self.name = name
@@ -512,7 +511,6 @@ class Species:
         self.molecularWeight = molecularWeight
         self.charge = charge
         self.type = type
-        self.subtype = subtype
         self.concentrations = concentrations
         self.crossRefs = crossRefs
         
@@ -776,18 +774,17 @@ def getModelFromExcel(filename):
             molecularWeight = mw,
             charge = charge,
             type = ws.cell(row = iRow, column = 7).value,
-            subtype = ws.cell(row = iRow, column = 8).value, 
             concentrations = [
-                Concentration(compartment = 'c', value = float(ws.cell(row = iRow, column = 9).value or 0)),
-                Concentration(compartment = 'e', value = float(ws.cell(row = iRow, column = 10).value or 0)),
+                Concentration(compartment = 'c', value = float(ws.cell(row = iRow, column = 8).value or 0)),
+                Concentration(compartment = 'e', value = float(ws.cell(row = iRow, column = 9).value or 0)),
                 ],
             crossRefs = [
                 CrossReference(
-                    source = ws.cell(row = iRow, column = 13).value, 
-                    id = ws.cell(row = iRow, column = 14).value,
+                    source = ws.cell(row = iRow, column = 10).value, 
+                    id = ws.cell(row = iRow, column = 11).value,
                     ),
                 ],
-            comments = ws.cell(row = iRow, column = 15).value,
+            comments = ws.cell(row = iRow, column = 12).value,
             ))
             
     #reactions
