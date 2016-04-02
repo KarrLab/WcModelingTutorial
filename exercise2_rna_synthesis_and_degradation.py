@@ -45,7 +45,7 @@ def simulate(model):
     #get data to mock other submodels
     metabolismSubmodel = model.getComponentById('Metabolism')   
     netMetabolismReaction = np.zeros((len(model.species), len(model.compartments)))
-    for part in metabolismSubmodel.getComponentById('BiomassProduction').participants:
+    for part in metabolismSubmodel.getComponentById('MetabolismProduction').participants:
         netMetabolismReaction[part.species.index, part.compartment.index] = -part.coefficient
             
     translationSubmodel = model.getComponentById('Translation')   

@@ -22,7 +22,7 @@ OUTPUT_DIRECTORY = 'out/exercise1_metabolism'
 #simulates model
 def simulate(model):
     #Get metabolism submodel
-    subModel = model.getComponentById('Metabolism')
+    submodel = model.getComponentById('Metabolism')
 
     #parameters
     cellCycleLength = model.getComponentById('cellCycleLength').value
@@ -30,13 +30,11 @@ def simulate(model):
 
     #Initialize state
     model.calcInitialConditions()
-    subModel.simulate()
-    model.calcInitialConditions()
 
     time = 0 #(s)
     volume = model.volume
     extracellularVolume = model.extracellularVolume
-    speciesCounts = subModel.speciesCounts
+    speciesCounts = submodel.speciesCounts
 
     #get data to mock other submodels  
     transcriptionSubmodel = model.getComponentById('Transcription')   
@@ -81,10 +79,10 @@ def simulate(model):
     extracellularVolumeHist[0] = extracellularVolume
 
     growthHist = np.full(nTimeStepsRecord, np.nan)
-    growthHist[0] = subModel.cobraModel.solution.x[subModel.biomassProductionReaction['index']]
+    growthHist[0] = model.growth
 
     speciesCountsHist = {}
-    for species in subModel.species:
+    for species in submodel.species:
         speciesCountsHist[species.id] = np.full(nTimeStepsRecord, np.nan)
         speciesCountsHist[species.id][0] = speciesCounts[species.id]
             
@@ -96,16 +94,17 @@ def simulate(model):
             print '\tStep = %d, t=%.1f s' % (iTime, time)
         
         #simulate submodel        
-        subModel.simulate(TIME_STEP)
+        submodel.calcReactionFluxes(TIME_STEP)
+        submodel.updateMetabolites(TIME_STEP)
         
         #mock other submodels
-        subModel.updateGlobalCellState(model)
+        submodel.updateGlobalCellState(model)
 
         model.speciesCounts += netTranslationReaction    * np.log(2) / cellCycleLength * np.exp(np.log(2) * time / cellCycleLength) * TIME_STEP
         model.speciesCounts += netTranscriptionReaction  * np.log(2) / cellCycleLength * np.exp(np.log(2) * time / cellCycleLength) * TIME_STEP
         model.speciesCounts += netRnaDegradationReaction * np.log(2) / cellCycleLength * np.exp(np.log(2) * time / cellCycleLength) * TIME_STEP
 
-        subModel.updateLocalCellState(model)
+        submodel.updateLocalCellState(model)
         
         #update mass, volume        
         model.calcMass()
@@ -114,9 +113,9 @@ def simulate(model):
         #Record state
         volumeHist[iTime] = model.volume
         extracellularVolumeHist[iTime] = model.extracellularVolume
-        growthHist[iTime] = subModel.cobraModel.solution.x[subModel.biomassProductionReaction['index']]
-        for species in subModel.species:
-            speciesCountsHist[species.id][iTime] = subModel.speciesCounts[species.id]
+        growthHist[iTime] = model.growth
+        for species in submodel.species:
+            speciesCountsHist[species.id][iTime] = submodel.speciesCounts[species.id]
     
     return (timeHist, volumeHist, extracellularVolumeHist, speciesCountsHist)
     
@@ -125,10 +124,10 @@ def analyzeResults(model, time, volume, extracellularVolume, speciesCounts):
     if not os.path.exists(OUTPUT_DIRECTORY):
         os.makedirs(OUTPUT_DIRECTORY)
 
-    subModel = model.getComponentById('Metabolism')
+    submodel = model.getComponentById('Metabolism')
     
     analysis.plot(
-        model = subModel, 
+        model = submodel, 
         time = time, 
         volume = volume, 
         extracellularVolume = extracellularVolume, 
@@ -139,7 +138,7 @@ def analyzeResults(model, time, volume, extracellularVolume, speciesCounts):
         )
 
     analysis.plot(
-        model = subModel, 
+        model = submodel, 
         time = time, 
         volume = volume, 
         extracellularVolume = extracellularVolume, 
@@ -150,7 +149,7 @@ def analyzeResults(model, time, volume, extracellularVolume, speciesCounts):
         )       
         
     analysis.plot(
-        model = subModel, 
+        model = submodel, 
         time = time, 
         volume = volume, 
         extracellularVolume = extracellularVolume, 

@@ -41,8 +41,6 @@ def simulate(model):
 
     #Initialize state
     model.calcInitialConditions()
-    metabolismSubmodel.simulate()
-    model.calcInitialConditions()
 
     time = 0 #(s)
     volume = model.volume
@@ -82,7 +80,7 @@ def simulate(model):
     extracellularVolumeHist[0] = extracellularVolume
 
     growthHist = np.full(nTimeStepsRecord, np.nan)
-    growthHist[0] = metabolismSubmodel.cobraModel.solution.x[metabolismSubmodel.biomassProductionReaction['index']]
+    growthHist[0] = model.growth
 
     speciesCountsHist = np.zeros((len(model.species), len(model.compartments), nTimeStepsRecord))
     speciesCountsHist[:, :, 0] = speciesCounts
@@ -96,7 +94,8 @@ def simulate(model):
         
         #simulate submodels
         metabolismSubmodel.updateLocalCellState(model)
-        metabolismSubmodel.simulate(TIME_STEP)
+        metabolismSubmodel.calcReactionFluxes(TIME_STEP)
+        metabolismSubmodel.updateMetabolites(TIME_STEP)
         metabolismSubmodel.updateGlobalCellState(model)        
 
         model.setSpeciesCountsDict(SsaSubmodel.stochasticSimulationAlgorithm(
@@ -118,7 +117,7 @@ def simulate(model):
         #Record state
         volumeHist[iTime] = model.volume
         extracellularVolumeHist[iTime] = model.extracellularVolume
-        growthHist[iTime] = metabolismSubmodel.cobraModel.solution.x[metabolismSubmodel.biomassProductionReaction['index']]
+        growthHist[iTime] = model.growth
         speciesCountsHist[:, :, iTime] = model.speciesCounts
     
     return (timeHist, volumeHist, extracellularVolumeHist, speciesCountsHist)

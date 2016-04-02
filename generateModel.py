@@ -345,8 +345,8 @@ def run(protLen = 100, startCodon = 'ATG', stopCodon = 'TAG'):
     
     stoichiometry = '[c]: %s ==> %s' % (' + '.join(lhs), ' + '.join(rhs))
         
-    rxnWs['A%d' % (nGene * 3 + 2)] = 'BiomassProduction' #id
-    rxnWs['B%d' % (nGene * 3 + 2)] = 'Biomass production' #id
+    rxnWs['A%d' % (nGene * 3 + 2)] = 'MetabolismProduction' #id
+    rxnWs['B%d' % (nGene * 3 + 2)] = 'Metabolism production' #id
     rxnWs['C%d' % (nGene * 3 + 2)] = 'Metabolism' #id
     rxnWs['D%d' % (nGene * 3 + 2)] = stoichiometry #stoichiometry
     rxnWs['E%d' % (nGene * 3 + 2)] = '' #enzyme

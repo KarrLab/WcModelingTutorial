@@ -26,14 +26,11 @@ RANDOM_SEED = 10000000
 def simulate(model):
     #Get FBA, SSA submodels
     ssaSubmodels = []
-    nonSsaSubmodels = []
     ssaReactions = []
     for submodel in model.submodels:
         if isinstance(submodel, SsaSubmodel):
             ssaSubmodels.append(submodel)
             ssaReactions.append(submodel.reactions)
-        else:
-            nonSsaSubmodels.append(submodel)
             
     metabolismSubmodel = model.getComponentById('Metabolism')
 
@@ -44,9 +41,6 @@ def simulate(model):
     random.seed(RANDOM_SEED)
 
     #Initialize state
-    model.calcInitialConditions()
-    for submodel in model.submodels:
-        submodel.simulate()
     model.calcInitialConditions()
 
     time = 0 #(s)
@@ -67,7 +61,7 @@ def simulate(model):
     extracellularVolumeHist[0] = extracellularVolume
 
     growthHist = np.full(nTimeStepsRecord, np.nan)
-    growthHist[0] = metabolismSubmodel.cobraModel.solution.x[metabolismSubmodel.biomassProductionReaction['index']]
+    growthHist[0] = model.growth
 
     speciesCountsHist = np.zeros((len(model.species), len(model.compartments), nTimeStepsRecord))
     speciesCountsHist[:, :, 0] = speciesCounts
@@ -80,10 +74,10 @@ def simulate(model):
             print '\tStep = %d, t=%.1f s' % (iTime, time)
         
         #simulate submodels
-        for nonSsaSubmodel in nonSsaSubmodels:
-            nonSsaSubmodel.updateLocalCellState(model)
-            nonSsaSubmodel.simulate(TIME_STEP)
-            nonSsaSubmodel.updateGlobalCellState(model)        
+        metabolismSubmodel.updateLocalCellState(model)
+        metabolismSubmodel.calcReactionFluxes(TIME_STEP)
+        metabolismSubmodel.updateMetabolites(TIME_STEP)
+        metabolismSubmodel.updateGlobalCellState(model)        
 
         model.setSpeciesCountsDict(SsaSubmodel.stochasticSimulationAlgorithm(
             model.getSpeciesCountsDict(), 
@@ -100,7 +94,7 @@ def simulate(model):
         #Record state
         volumeHist[iTime] = model.volume
         extracellularVolumeHist[iTime] = model.extracellularVolume
-        growthHist[iTime] = metabolismSubmodel.cobraModel.solution.x[metabolismSubmodel.biomassProductionReaction['index']]
+        growthHist[iTime] = model.growth
         speciesCountsHist[:, :, iTime] = model.speciesCounts
 
     return (timeHist, volumeHist, extracellularVolumeHist, speciesCountsHist)
