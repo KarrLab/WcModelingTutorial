@@ -12,6 +12,9 @@ from cobra import Reaction as CobraReaction
 from itertools import chain
 from numpy import random
 from openpyxl import load_workbook
+# debugging
+import inspect
+print 'load_workbook is in:', inspect.getfile( load_workbook )
 from util import N_AVOGADRO
 import math
 import numpy as np
@@ -20,7 +23,13 @@ import re
 import warnings
 
 #Represents a model (submodels, compartments, species, reactions, parameters, references)
-class Model:
+# COMMENT(Arthur): tabs were providing indentation, which confused the parser; converted them to spaces
+# COMMENT(Arthur): recommended current use is 'new style' python classes, declared 'class Model(object)'
+class Model():
+    # COMMENT(Arthur): These initialization statements (up through 'growth = None') don't do anything.
+    # They create and initialize class or static variables, which are attributes of the class definition, not class instances. 
+    # E.g., to reference this declaration of 'submodels' one must write 'Model.submodels'.
+    '''
     submodels = []
     compartments = []
     species = []
@@ -37,6 +46,7 @@ class Model:
     volume = None #cell volume
     extracellularVolume = None #media volume
     growth = None
+    '''
     
     def __init__(self, submodels = [], compartments = [], species = [], reactions = [], parameters = [], references = []):
         self.submodels = submodels
@@ -47,6 +57,9 @@ class Model:
         self.references = references       
         
     def setupSimulation(self):
+        # COMMENT(Arthur): minor point, but as we discussed fractionDryWeight isn't standard
+        # python naming for a variable; I'm not so consistent about it either;
+        # here's the Google Python Style Guide https://google.github.io/styleguide/pyguide.html
         self.fractionDryWeight = self.getComponentById('fractionDryWeight', self.parameters).value
     
         for subModel in self.submodels:
@@ -88,6 +101,7 @@ class Model:
     
         mass = 0.
         for species in self.species:
+            # COMMENT(Arthur): isn't a weight of None an error, hopefully caught earlier
             if species.molecularWeight is not None:
                 mass += self.speciesCounts[species.index, iCellComp] * species.molecularWeight
         mass /= N_AVOGADRO
@@ -98,6 +112,8 @@ class Model:
     def calcVolume(self):
         self.volume = self.mass / self.density
         
+    # COMMENT(Arthur): rather than add an index to each object, if everything has a id
+    # one can create a map from id to index and then use that; 
     def setComponentIndices(self):
         for index, obj in enumerate(self.submodels):
             obj.index = index
@@ -120,7 +136,7 @@ class Model:
                 speciesCountsDict['%s[%s]' % (species.id, compartment.id)] = self.speciesCounts[species.index, compartment.index]                
         return speciesCountsDict
     
-    #set species counts for dictionary
+    #set species counts from dictionary
     def setSpeciesCountsDict(self, speciesCountsDict):
         for species in self.species:
             for compartment in self.compartments:
@@ -128,7 +144,9 @@ class Model:
                 
     #get species concentrations
     def getSpeciesConcentrations(self):
-        return self.speciesCounts / self.getSpeciesVolumes() / N_AVOGADRO
+        # COMMENT(Arthur): I added parens so one doesn't need to know 
+        # Python operator precedence to understand the code
+        return (self.speciesCounts / self.getSpeciesVolumes()) / N_AVOGADRO
         
     #get species concentrations
     def getSpeciesConcentrationsDict(self):
@@ -136,6 +154,9 @@ class Model:
         speciesConcsDict = {}
         for species in self.species:
             for compartment in self.compartments:
+                # COMMENT(Arthur): as it's not mutable, one can use a tuple 
+                # (in general, any 'hashable') as a dict key
+                # e.g., speciesConcsDict[ (species.id, compartment.id) ]
                 speciesConcsDict['%s[%s]' % (species.id, compartment.id)] = concs[species.index, compartment.index]                
         return speciesConcsDict
     
@@ -149,7 +170,7 @@ class Model:
         volumes[:, extracellularComp.index] = self.extracellularVolume
         return volumes
         
-    #get species counts as dictionary
+    #get species volumes as dictionary
     def getSpeciesVolumesDict(self):  
         volumes = self.getSpeciesVolumes()         
         volumesDict = {}
@@ -183,9 +204,20 @@ class Model:
         for component in components:
             if component.id == id:
                 return component
-               
+    
+    # COMMENT(Arthur): it's often helpful for an object to return a string rep of itself
+    # usually this is written in the __str__() method, but here we want a reassuring summary
+    def summary( self ):
+        counts=[]
+        for attr in 'submodels compartments species reactions parameters references'.split():
+            counts.append( "{} {}".format( attr, len( getattr( self, attr ) ) ) )
+        return "Model contains:\n{}".format( '\n'.join( counts ) )
+        
 #Represents a submodel
+# COMMENT(Arthur): again, recommended current use is 'new style' python classes ...
 class Submodel:
+    # COMMENT(Arthur): Same comment re initialization statements ...
+    '''
     index = None
     id = ''
     name = ''
@@ -198,8 +230,10 @@ class Submodel:
     speciesCounts = np.zeros(0)
     volume = np.zeros(0)
     extracellularVolume = np.zeros(0)
+    '''
     
     def __init__(self, id = '', name = '', reactions = [], species = []):
+        # COMMENT(Arthur): make required args positional, to ensure they're provided
         self.id = id
         self.name = name
         self.reactions = reactions
@@ -207,24 +241,33 @@ class Submodel:
         
     def setupSimulation(self):
         #initialize species counts dictionary
+        # DES PLANNING COMMENT(Arthur): DES can use a local speciesCounts in each submodel
         self.speciesCounts = {}
         for species in self.species:
             self.speciesCounts[species.id] = 0
+        # COMMENT(Arthur): can do this with a 'dict comprehension':
+        # d = { key : value for x in iterable }, where key and value can be determined from x
+        test = { species.id : 0 for species in self.species}
+        assert self.speciesCounts == test
         
     #sets local species counts from global species counts
     def updateLocalCellState(self, model):
+        # DES PLANNING COMMENT(Arthur): DES must replace this with time-based reads of the cell state
         for species in self.species:
             self.speciesCounts[species.id] = model.speciesCounts[species.species.index, species.compartment.index]
         self.volume = model.volume
         self.extracellularVolume = model.extracellularVolume
     
     #sets global species counts from local species counts 
+    # COMMENT(Arthur): so this just overwrites global counts with local counts
     def updateGlobalCellState(self, model):
+        # DES PLANNING COMMENT(Arthur): DES replaces this with time-based adjustments to the cell state
         for species in self.species:
             model.speciesCounts[species.species.index, species.compartment.index] = self.speciesCounts[species.id]
             
     #get species concentrations
     def getSpeciesConcentrations(self):
+        # DES PLANNING COMMENT(Arthur): DES can use this; for DES, copy numbers are fundamental, concentrations are derived
         volumes = self.getSpeciesVolumes()
         concs = {}
         for species in self.species:
@@ -233,6 +276,7 @@ class Submodel:
         
     #get container volumes for each species
     def getSpeciesVolumes(self):
+        # DES PLANNING COMMENT(Arthur): DES can use this
         volumes = {}
         for species in self.species:
             if species.compartment.id == 'c':
@@ -244,20 +288,26 @@ class Submodel:
     #calculate reaction rates
     @staticmethod
     def calcReactionRates(reactions, speciesConcentrations):
+        # DES PLANNING COMMENT(Arthur): DES can use this
         rates = np.full(len(reactions), np.nan)
         for iRxn, rxn in enumerate(reactions):          
             if rxn.rateLaw:
+                # COMMENT(Arthur): nice
+                # COMMENT(Arthur): would be good to catch SyntaxError exceptions, which may not get detected
+                # until here
                 rates[iRxn] = eval(rxn.rateLaw.transcoded, {}, {'speciesConcentrations': speciesConcentrations, 'Vmax': rxn.vmax, 'Km': rxn.km})
         return rates
                
     #update species counts based on a reaction
     @staticmethod
     def executeReaction(speciesCounts, reaction):
+        # DES PLANNING COMMENT(Arthur): DES can use this
         for part in reaction.participants:
             speciesCounts[part.id] += part.coefficient
         return speciesCounts
     
     def getComponentById(self, id, components = None):
+        # DES PLANNING COMMENT(Arthur): DES can use this
         if not components:
             components = chain(self.species, self.reactions, self.parameters)
         
@@ -267,6 +317,7 @@ class Submodel:
         
 #Represents an FBA submodel
 class FbaSubmodel(Submodel):
+    # COMMENT(Arthur): I want to understand this better.
     metabolismProductionReaction = None 
     exchangedSpecies = None
     
@@ -429,6 +480,7 @@ class SsaSubmodel(Submodel):
             
     @staticmethod
     def stochasticSimulationAlgorithm(speciesCounts, speciesVolumes, reactions, volume, timeMax):
+        # COMMENT(Arthur): strange statement; can't reactions be kept in right data structure?
         if len(reactions) >= 1 and not isinstance(reactions[0], list):
             reactions = [reactions]
             
@@ -445,12 +497,19 @@ class SsaSubmodel(Submodel):
             totalPropensities = np.zeros(nSubmodels)
             reactionPropensities = []
             for iSubmodel in range(nSubmodels):
+                # COMMENT(Arthur): each submodel separate in OO DES
+                # COMMENT(Arthur): I understand physicality of concentrations and propensities, 
+                # but wasteful to divide by volume & N_AVOGADRO and then multiply by them
+
+                # COMMENT(Arthur): optimization: only calculate new reaction rates for species whose 
+                # speciesConcentrations (counts) change
                 p = np.maximum(0, Submodel.calcReactionRates(reactions[iSubmodel], speciesConcentrations) * volume * N_AVOGADRO)
                 totalPropensities[iSubmodel] = np.sum(p)
                 reactionPropensities.append(p)
             
             #Select time to next reaction from exponential distribution
             dt = random.exponential(1/np.sum(totalPropensities))
+            # COMMENT(Arthur): OO DES avoids this if statement, as timeMax will be end of simulation
             if time + dt > timeMax:
                 if random.rand() > (timeMax - time) / dt:                
                     break
@@ -458,6 +517,7 @@ class SsaSubmodel(Submodel):
                     dt = timeMax - time
             
             #Select next reaction
+            # COMMENT(Arthur): OO DES executes each submodel separately
             iSubmodel = random.choice(nSubmodels, p = totalPropensities / np.sum(totalPropensities))                    
             iRxn = random.choice(len(reactionPropensities[iSubmodel]), p = reactionPropensities[iSubmodel] / totalPropensities[iSubmodel])
 
@@ -528,6 +588,7 @@ class Reaction:
     crossRefs = []
     comments = ''
 
+    # COMMENT(Arthur): for debugging would be nice to retain the initial Stoichiometry text
     def __init__(self, id = '', name = '', submodel = '', reversible = None, participants = [], 
         enzyme = '', rateLaw = '', vmax = None, km = None, crossRefs = [], comments = ''):
         
@@ -724,6 +785,10 @@ def getModelFromExcel(filename):
     #submodels
     ws = wb['Submodels']
     for iRow in range(2, ws.max_row + 1):
+        # COMMENT(Arthur): make this more concise & data driven, 
+        # e.g., write ws.getNextRow() to get next row
+        # and id = ws.get( 'ID' ), id = ws.get( 'Name' ), etc. where 'ID' refers to the column heading
+        # even better, write  id, name, algorithm = ws.get( 'ID', 'Name', 'Algorithm' ) 
         id = ws.cell(row = iRow, column = 1).value
         name = ws.cell(row = iRow, column = 2).value
         algorithm = ws.cell(row = iRow, column = 3).value
@@ -732,6 +797,7 @@ def getModelFromExcel(filename):
         elif algorithm == 'SSA':
             subModel = SsaSubmodel(id = id, name = name)
         else:
+            # COMMENT(Arthur): use "".format()
             raise Exception('Undefined algorithm "%s" for submodel "%s"' % (algorithm, id))
         model.submodels.append(subModel)
             
@@ -821,7 +887,7 @@ def getModelFromExcel(filename):
             submodel = ws.cell(row = iRow, column = 3).value,
             value = float(ws.cell(row = iRow, column = 4).value),
             units = ws.cell(row = iRow, column = 5).value,
-			comments = ws.cell(row = iRow, column = 6).value,
+            comments = ws.cell(row = iRow, column = 6).value,
             ))
             
     #references
@@ -944,52 +1010,64 @@ def getModelFromExcel(filename):
 #Parse a string representing the stoichiometry of a reaction into a Python object
 def parseStoichiometry(rxnStr):
     #Split stoichiometry in to global compartment, left-hand side, right-hand side, reversibility indictor
-	rxnMatch = re.match('(?P<compartment>\[([a-z])\]: )?(?P<lhs>((\(\d*\.?\d*([e][-+]?[0-9]+)?\) )?[a-z0-9\-_]+(\[[a-z]\])? \+ )*(\(\d*\.?\d*([e][-+]?[0-9]+)?\) )?[a-z0-9\-_]+(\[[a-z]\])?) (?P<direction>[<]?)==> (?P<rhs>((\(\d*\.?\d*([e][-+]?[0-9]+)?\) )?[a-z0-9\-_]+(\[[a-z]\])? \+ )*(\(\d*\.?\d*([e][-+]?[0-9]+)?\) )?[a-z0-9\-_]+(\[[a-z]\])?)', rxnStr, flags=re.I)
-	if rxnMatch is None:
-		raise Exception('Invalid stoichiometry: %s' % rxnStr)
-		
+    '''
+    COMMENT(Arthur): while RE parsers can be written quickly, for long-term use I think they're generally a bad idea 
+    because they're difficult to read and quite brittle. That is, changes to the language can be quite difficult
+    to implement in the parser. Also, RE parsers tend to be buggie, i.e., the patterns accept or fail to accept 
+    unanticipated edge cases. 
+    Instead, I recommend that we get in the habit of building grammer-based parsers. In exchange for taking
+    longer to built (but less longer as one gets experienced), we'll get parsers that are much easier to 
+    understand, test, and change. Also, they generate much better errors and the languages they accept will 
+    be easier to explain and document.
+    Several python based parsers are described at https://wiki.python.org/moin/LanguageParsing.
+    '''
+    rxnMatch = re.match('(?P<compartment>\[([a-z])\]: )?(?P<lhs>((\(\d*\.?\d*([e][-+]?[0-9]+)?\) )?[a-z0-9\-_]+(\[[a-z]\])? \+ )*(\(\d*\.?\d*([e][-+]?[0-9]+)?\) )?[a-z0-9\-_]+(\[[a-z]\])?) (?P<direction>[<]?)==> (?P<rhs>((\(\d*\.?\d*([e][-+]?[0-9]+)?\) )?[a-z0-9\-_]+(\[[a-z]\])? \+ )*(\(\d*\.?\d*([e][-+]?[0-9]+)?\) )?[a-z0-9\-_]+(\[[a-z]\])?)', rxnStr, flags=re.I)
+    if rxnMatch is None:
+        raise Exception('Invalid stoichiometry: %s' % rxnStr)
+        
     #Determine reversiblity
-	rxnDict = rxnMatch.groupdict()
-	reversible = rxnDict['direction'] == '<'
-	
+    rxnDict = rxnMatch.groupdict()
+    reversible = rxnDict['direction'] == '<'
+    
     #Determine if global compartment for reaction was specified
-	if rxnDict['compartment'] is None:
-		globalComp = None
-	else:
-		globalComp = re.match('\[(?P<compartment>[a-z])\]', rxnDict['compartment'], flags=re.I).groupdict()['compartment']
-	
+    if rxnDict['compartment'] is None:
+        globalComp = None
+    else:
+        globalComp = re.match('\[(?P<compartment>[a-z])\]', rxnDict['compartment'], flags=re.I).groupdict()['compartment']
+    
     #initialize array of reaction participants
-	participants = []
-	
+    participants = []
+    
     #Parse left-hand side
-	for rxnPartStr in rxnDict['lhs'].split(' + '):
-		rxnPartDict = re.match('(\((?P<coefficient>\d*\.?\d*([e][-+]?[0-9]+)?)\) )?(?P<species>[a-z0-9\-_]+)(\[(?P<compartment>[a-z])\])?', rxnPartStr, flags=re.I).groupdict()
-				
-		species = rxnPartDict['species']
-		compartment = rxnPartDict['compartment'] or globalComp
-		coefficient = float(rxnPartDict['coefficient'] or 1)
-	
-		participants.append(ReactionParticipant(
-			species = species,
-			compartment = compartment,
-			coefficient = -coefficient,
-			))
-			
+    for rxnPartStr in rxnDict['lhs'].split(' + '):
+        rxnPartDict = re.match('(\((?P<coefficient>\d*\.?\d*([e][-+]?[0-9]+)?)\) )?(?P<species>[a-z0-9\-_]+)(\[(?P<compartment>[a-z])\])?', rxnPartStr, flags=re.I).groupdict()
+                
+        species = rxnPartDict['species']
+        compartment = rxnPartDict['compartment'] or globalComp
+        coefficient = float(rxnPartDict['coefficient'] or 1)
+    
+        participants.append(ReactionParticipant(
+            species = species,
+            compartment = compartment,
+            coefficient = -coefficient,
+            ))
+            
     #Parse right-hand side
-	for rxnPartStr in rxnDict['rhs'].split(' + '):
-		rxnPartDict = re.match('(\((?P<coefficient>\d*\.?\d*([e][-+]?[0-9]+)?)\) )?(?P<species>[a-z0-9\-_]+)(\[(?P<compartment>[a-z])\])?', rxnPartStr, flags=re.I).groupdict()
-				
-		species = rxnPartDict['species']
-		compartment = rxnPartDict['compartment'] or globalComp
-		coefficient = float(rxnPartDict['coefficient'] or 1)
-	
-		participants.append(ReactionParticipant(
-			species = species,
-			compartment = compartment,
-			coefficient = coefficient,
-			))
+    for rxnPartStr in rxnDict['rhs'].split(' + '):
+        '''COMMENT(Arthur): same RE as above; reuse'''
+        rxnPartDict = re.match('(\((?P<coefficient>\d*\.?\d*([e][-+]?[0-9]+)?)\) )?(?P<species>[a-z0-9\-_]+)(\[(?P<compartment>[a-z])\])?', rxnPartStr, flags=re.I).groupdict()
+        
+        species = rxnPartDict['species']
+        compartment = rxnPartDict['compartment'] or globalComp
+        coefficient = float(rxnPartDict['coefficient'] or 1)
+        
+        participants.append(ReactionParticipant(
+            species = species,
+            compartment = compartment,
+            coefficient = coefficient,
+            ))
 
-	return {
-		'reversible': reversible,
-		'participants': participants,
-		}
+    return {
+        'reversible': reversible,
+        'participants': participants,
+        }

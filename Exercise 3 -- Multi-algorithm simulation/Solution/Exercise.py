@@ -7,13 +7,25 @@ Simulates metabolism submodel
 @date 3/24/2016
 '''
 
+'''
+COMMENT(Arthur): symbolic links are not a good way to access python modules from multiple directories in a file hierarchy. E.g., a compiled .pyc file may not be detected as older than its source .py.
+The standard method is to use python heirarchical package naming (a.b.c). See https://docs.python.org/2.7/tutorial/modules.html#packages
+The trick is to put empty __init__.py files in all subdirectories containing modules used by the package to tell
+the python loader to look for modules in those directories. This requires that directory names be valid Python
+identifiers.
+'''
+
 #required libraries
-from model import getModelFromExcel, Submodel, SsaSubmodel #code for model in exercises
+from WcModelingTutorial.TutorialConstruction.model import getModelFromExcel, Submodel, SsaSubmodel
+# from model import getModelFromExcel, Submodel, SsaSubmodel #code for model in exercises
 from numpy import random
 from util import N_AVOGADRO
-import analysis #code to analyze simulation results in exercises
+from WcModelingTutorial.TutorialConstruction import analysis    #code to analyze simulation results in exercises
 import numpy as np
 import os
+
+import inspect
+print 'getModelFromExcel is in:', inspect.getfile( getModelFromExcel )
 
 #simulation parameters
 MODEL_FILENAME = 'Model.xlsx'
@@ -74,6 +86,7 @@ def simulate(model):
 
         speciesCountsDict = model.getSpeciesCountsDict()        
         time2 = 0
+        # COMMENT(Arthur): quite similar to SsaSubmodel.stochasticSimulationAlgorithm(); why not use that?
         while time2 < TIME_STEP:
             time = 0
             
@@ -141,6 +154,9 @@ def analyzeResults(model, time, volume, growth, speciesCounts):
         model = model, 
         time = time, 
         yDatas = {'Volume': volume},
+        # COMMENT(Arthur): needs volumetric units, but analysis.plot() doesn't handle them
+        # COMMENT(Arthur): one could make 'scale' another argument to plot(), and then 
+        # use scale and units directly when scale is provided
         fileName = os.path.join(OUTPUT_DIRECTORY, 'Volume.pdf')
         )
         

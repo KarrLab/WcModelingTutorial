@@ -1,4 +1,5 @@
 *.pyc
+*.pdf
 Tutorial construction/data/*.fasta
 Tutorial construction/data/Model-RNA and proteins.xlsx
 Tutorial construction/out
