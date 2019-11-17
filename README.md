@@ -50,8 +50,8 @@ git clone https://github.com/KarrLab/WcModelingTutorial.git
 ## Using the tutorial
 We recommmend:
 
-1. Watch the [introductory lecture](). This introduces WC modeling and provides an overview of the current state of the art. The [slides](https://github.com/KarrLab/WcModelingTutorial/raw/master/1.%20Introduction%20to%20whole-cell%20modeling.pdf) for this video are included in this repository.
-2. Watch the [tutorial introduction video](). This breifly reviews WC modeling and outlines the tutorials. The [slides](https://github.com/KarrLab/WcModelingTutorial/raw/master/3.%20Exercises.pdf) for this video are included in this repository.
+1. Read the [introductory lecture](https://github.com/KarrLab/WcModelingTutorial/raw/master/1.%20Introduction%20to%20whole-cell%20modeling.pdf). This introduces WC modeling and provides an overview of the current state of the art. 
+2. Read the [tutorial introduction](https://github.com/KarrLab/WcModelingTutorial/raw/master/3.%20Exercises.pdf). This breifly reviews WC modeling and outlines the tutorials.
 3. Complete the tutorials 1-5. We recommend completing the tutorials in this order because the tutorials build upon each other. The [tutorial introduction slides](https://github.com/KarrLab/WcModelingTutorial/raw/master/3.%20Exercises.pdf) contain instructions for the tutorial and summarize the solutions. All of the materials for the tutorials, as well as their detailed solutions are contained in the directories titled "Exercise X ...".
 
 ## Further information
