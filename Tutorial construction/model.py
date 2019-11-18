@@ -299,20 +299,25 @@ class FbaSubmodel(Submodel):
         cobraModel.add_metabolites(cbMets)
         
         #setup reactions
+        objective = {}
         for rxn in self.reactions:            
             cbRxn = CobraReaction(
                 id = rxn.id,
                 name = rxn.name,
                 lower_bound = -self.defaultFbaBound if rxn.reversible else 0,
                 upper_bound =  self.defaultFbaBound,
-                objective_coefficient = 1 if rxn.id == 'MetabolismProduction' else 0,
                 )
             cobraModel.add_reaction(cbRxn)
-
+            if rxn.id == 'MetabolismProduction':
+                objective[cbRxn] = 1.0
+            
             cbMets = {}
             for part in rxn.participants:
                 cbMets[part.id] = part.coefficient
-            cbRxn.add_metabolites(cbMets)            
+            cbRxn.add_metabolites(cbMets)
+        
+        #add objective to model
+        cobraModel.objective = objective
         
         #add external exchange reactions
         self.exchangedSpecies = []
@@ -323,7 +328,6 @@ class FbaSubmodel(Submodel):
                     name = '%s exchange' % species.species.name,
                     lower_bound = -self.defaultFbaBound,
                     upper_bound =  self.defaultFbaBound,
-                    objective_coefficient = 0,
                     )
                 cobraModel.add_reaction(cbRxn)
                 cbRxn.add_metabolites({species.id: 1})
@@ -336,17 +340,21 @@ class FbaSubmodel(Submodel):
             name = 'Biomass exchange',
             lower_bound = 0,
             upper_bound = self.defaultFbaBound,
-            objective_coefficient = 0,
             )
         cobraModel.add_reaction(cbRxn)
         cbRxn.add_metabolites({'Biomass[c]': -1})
         
         '''Bounds'''
-        #thermodynamic       
-        arrayCobraModel = cobraModel.to_array_based_model()
+        
+        #thermodynamic
+        lower_bounds = []
+        upper_bounds = []
+        for reaction in cobraModel.reactions:
+            lower_bounds.append(reaction.lower_bound)
+            upper_bounds.append(reaction.upper_bound)
         self.thermodynamicBounds = {
-            'lower': np.array(arrayCobraModel.lower_bounds.tolist()),
-            'upper': np.array(arrayCobraModel.upper_bounds.tolist()),
+            'lower': np.array(lower_bounds),
+            'upper': np.array(upper_bounds),
             }
         
         #exchange reactions
@@ -380,9 +388,8 @@ class FbaSubmodel(Submodel):
                         
     def calcReactionFluxes(self, timeStep = 1):
         '''calculate growth rate'''
-        self.cobraModel.optimize()
+        self.reactionFluxes = self.cobraModel.optimize().fluxes.values
         
-        self.reactionFluxes = self.cobraModel.solution.x
         self.growth = self.reactionFluxes[self.metabolismProductionReaction['index']] #fraction cell/s
         
     def updateMetabolites(self, timeStep = 1):
@@ -405,6 +412,7 @@ class FbaSubmodel(Submodel):
             self.calcReactionRates(self.reactions, self.getSpeciesConcentrations()) * self.volume * N_AVOGADRO,
             )
         
+        raw_input('Enter your input:')
         #external nutrients availability
         for exSpecies in self.exchangedSpecies:
             upperBounds[exSpecies.reactionIndex] = max(0, np.minimum(upperBounds[exSpecies.reactionIndex], self.speciesCounts[exSpecies.id]) / timeStep)
@@ -414,10 +422,10 @@ class FbaSubmodel(Submodel):
         upperBounds = util.nanminimum(upperBounds, self.dryWeight / 3600 * N_AVOGADRO * 1e-3 * self.exchangeRateBounds['upper'])
         
         #return
-        arrCbModel = self.cobraModel.to_array_based_model()
-        arrCbModel.lower_bounds = lowerBounds
-        arrCbModel.upper_bounds = upperBounds
-        
+        for rxn in self.cobraModel.reactions:
+            index = self.cobraModel.reactions.index(rxn.id)
+            self.cobraModel.reactions[index].bounds = lowerBounds[index], upperBounds[index]
+
 #Represents an SSA submodel
 class SsaSubmodel(Submodel):
     def __init__(self, *args, **kwargs):
