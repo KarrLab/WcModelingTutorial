@@ -412,7 +412,6 @@ class FbaSubmodel(Submodel):
             self.calcReactionRates(self.reactions, self.getSpeciesConcentrations()) * self.volume * N_AVOGADRO,
             )
         
-        raw_input('Enter your input:')
         #external nutrients availability
         for exSpecies in self.exchangedSpecies:
             upperBounds[exSpecies.reactionIndex] = max(0, np.minimum(upperBounds[exSpecies.reactionIndex], self.speciesCounts[exSpecies.id]) / timeStep)
