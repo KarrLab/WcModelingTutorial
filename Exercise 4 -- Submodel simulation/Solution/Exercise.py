@@ -84,11 +84,11 @@ def simulate(model):
         speciesCountsHist[species.id][0] = speciesCounts[species.id]
             
     #Simulate dynamics
-    print 'Simulating for %d time steps from 0-%d s' % (nTimeSteps, timeMax)
+    print('Simulating for %d time steps from 0-%d s' % (nTimeSteps, timeMax))
     for iTime in range(1, nTimeSteps):
         time = iTime * TIME_STEP
         if iTime % 100 == 1:
-            print '\tStep = %d, t = %.1f s' % (iTime, time)
+            print('\tStep = %d, t = %.1f s' % (iTime, time))
         
         #simulate submodel        
         submodel.calcReactionBounds(TIME_STEP)

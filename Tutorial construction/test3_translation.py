@@ -87,11 +87,11 @@ def simulate(model):
     speciesCountsHist[:, :, 0] = speciesCounts
             
     #Simulate dynamics
-    print 'Simulating for %d time steps from 0-%d s' % (nTimeSteps, timeMax)
+    print('Simulating for %d time steps from 0-%d s' % (nTimeSteps, timeMax))
     for iTime in range(1, nTimeSteps):
         time = iTime * TIME_STEP
         if iTime % 100 == 1:
-            print '\tStep = %d, t=%.1f s' % (iTime, time)
+            print('\tStep = %d, t=%.1f s' % (iTime, time))
         
         #simulate submodels
         model.setSpeciesCountsDict(SsaSubmodel.stochasticSimulationAlgorithm(
